@@ -18223,7 +18223,27 @@ function cpFinishOnboarding(){
   syncAllIncomeSourcesToAllYears();
   loadDB();
   document.getElementById('createProfileOverlay').style.display='none';
-  enterApp();
+
+  // If we arrived here from Firebase new-user onboarding, enter via Firebase path
+  const fbUser = window._fbPendingUser;
+  if (fbUser) {
+    window._fbPendingUser = null;
+    loadThemeFromDB();
+    loadCurrencyFromDB();
+    document.getElementById('main').style.visibility = 'visible';
+    document.getElementById('sidebar').style.visibility = 'visible';
+    const av = document.getElementById('sidebarProfileAvatar'); if(av) av.textContent = activeProfileEmoji;
+    const nm = document.getElementById('sidebarProfileName'); if(nm) nm.textContent = activeProfileName;
+    const sy = document.getElementById('sidebarYear'); if(sy) sy.textContent = activeYear==='all'?'ALL':activeYear;
+    updateYearButtons();
+    repopulateMonthSelects();
+    renderPage(currentPage);
+    updatePerfIndicator();
+    if (typeof _renderFirebaseSidebarBadge === 'function') _renderFirebaseSidebarBadge(fbUser);
+    toast('Welcome, ' + activeProfileName + ' ✓');
+  } else {
+    enterApp();
+  }
   } catch(e) {
     console.error('cpFinishOnboarding error:', e);
     alert('Error launching: ' + e.message + '\n\n' + e.stack);
@@ -18303,10 +18323,36 @@ window._onFirebaseUser = async function(user) {
       await window._fbSaveUserData(user.uid, { _mirror: FILE_DATA, _seeded: true, _uid: user.uid });
     }
   } else {
-    // Brand new user — no data at all
+    // Brand new user — no data at all → show onboarding
     activeProfileName  = user.displayName || user.email || 'User';
     activeProfileEmoji = '👤';
     activeProfilePin   = null;
+
+    // Patch saveDB before onboarding so saves go to Firestore
+    _patchSaveDBForFirebase(user.uid);
+
+    // Hide auth screen and show onboarding overlay
+    window._fbHideAuthScreen();
+    _mirror.userName  = activeProfileName;
+    _mirror.userEmoji = activeProfileEmoji;
+    _clearOnboardingFields();
+    // Pre-fill name from Google account
+    const cpNameEl = document.getElementById('cpName');
+    if (cpNameEl) cpNameEl.value = activeProfileName;
+    // Show Step 3 (the setup/onboarding form) directly
+    const s1 = document.getElementById('cpStep1');
+    const s2 = document.getElementById('cpStep2');
+    const s3 = document.getElementById('cpStep3');
+    if (s1) s1.style.display = 'none';
+    if (s2) s2.style.display = 'none';
+    if (s3) s3.style.display = 'block';
+    const backBtn = document.getElementById('cpBackBtn');
+    if (backBtn) backBtn.style.display = 'none';
+    const overlay = document.getElementById('createProfileOverlay');
+    if (overlay) overlay.style.display = 'flex';
+    // Store user ref so cpFinishOnboarding can enter the app via Firebase path
+    window._fbPendingUser = user;
+    return; // Don't enter app yet — wait for onboarding completion
   }
 
   // Patch saveDB to also push to Firestore (debounced)
