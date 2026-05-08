@@ -2142,6 +2142,76 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
     } catch(e) { console.warn('Firestore delete error', e); }
   };
 
+  // ── Session enforcement (single active session) ──
+  window._fbSessionId = Math.random().toString(36).slice(2) + Date.now();
+  window._fbSessionPollTimer = null;
+
+  window._fbRegisterSession = async (uid) => {
+    try {
+      await setDoc(doc(db, 'sessions', uid), { sessionId: window._fbSessionId, ts: Date.now() }, { merge: false });
+    } catch(e) { console.warn('Session register error', e); }
+  };
+
+  window._fbCheckSession = async (uid) => {
+    try {
+      const snap = await getDoc(doc(db, 'sessions', uid));
+      if (!snap.exists()) return;
+      if (snap.data().sessionId !== window._fbSessionId) {
+        clearInterval(window._fbSessionPollTimer);
+        window._fbSessionPollTimer = null;
+        window._fbShowSessionKicked && window._fbShowSessionKicked();
+      }
+    } catch(e) {}
+  };
+
+  window._fbStartSessionPoll = (uid) => {
+    clearInterval(window._fbSessionPollTimer);
+    window._fbSessionPollTimer = setInterval(() => window._fbCheckSession(uid), 15000);
+  };
+
+  window._fbShowSessionKicked = function() {
+    const el = document.getElementById('fbAuthScreen');
+    if (el) { el.style.opacity='1'; el.style.visibility='visible'; el.style.pointerEvents='auto'; }
+    const btn  = document.getElementById('_fbGoogleBtn');
+    const spin = document.getElementById('_fbLoadingState');
+    const err  = document.getElementById('_fbErrMsg');
+    if (btn)  btn.style.display = 'none';
+    if (spin) spin.style.display = 'none';
+    if (err)  err.innerHTML = '⚠️ Another device signed in.<br>This session has ended.<br><br><button onclick="location.reload()" style="padding:10px 20px;border-radius:8px;border:none;background:var(--accent);color:#000;font-size:13px;font-weight:700;cursor:pointer">Sign in again</button>';
+    document.getElementById('main').style.visibility = 'hidden';
+    document.getElementById('sidebar').style.visibility = 'hidden';
+  };
+
+  // ── Manual sync from Firestore ──
+  window._fbManualSync = async () => {
+    const user = window._fbCurrentUser;
+    if (!user || !window._fbLoadUserData) return;
+    const syncBtn = document.getElementById('_fbSyncBtn');
+    if (syncBtn) { syncBtn.textContent = '⟳'; syncBtn.style.opacity = '0.5'; syncBtn.disabled = true; }
+    try {
+      const fsData = await window._fbLoadUserData(user.uid);
+      if (fsData && fsData._mirror) {
+        Object.assign(_mirror, fsData._mirror);
+        activeProfileName  = _mirror.userName  || user.displayName || user.email || 'User';
+        activeProfileEmoji = _mirror.userEmoji || '\u{1F464}';
+        if (typeof loadDB === 'function') loadDB();
+        if (typeof loadThemeFromDB === 'function') loadThemeFromDB();
+        if (typeof loadCurrencyFromDB === 'function') loadCurrencyFromDB();
+        if (typeof renderPage === 'function') renderPage(currentPage);
+        if (typeof updateYearButtons === 'function') updateYearButtons();
+        if (typeof repopulateMonthSelects === 'function') repopulateMonthSelects();
+        const av = document.getElementById('sidebarProfileAvatar'); if(av) av.textContent = activeProfileEmoji;
+        const nm = document.getElementById('sidebarProfileName'); if(nm) nm.textContent = activeProfileName;
+        if (typeof toast === 'function') toast('\u2705 Synced from cloud \u2713');
+      } else {
+        if (typeof toast === 'function') toast('\u26a0\ufe0f No cloud data found');
+      }
+    } catch(e) {
+      if (typeof toast === 'function') toast('\u274c Sync failed');
+    }
+    if (syncBtn) { syncBtn.textContent = '\u2601 Sync'; syncBtn.style.opacity = '1'; syncBtn.disabled = false; }
+  };
+
   // ── Handle redirect result (mobile flow) ──
   getRedirectResult(auth).then(result => {
     if (result && result.user) window._onFirebaseUser(result.user);
@@ -2152,7 +2222,6 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
     if (user) {
       window._onFirebaseUser(user);
     } else {
-      // Not signed in — show auth screen
       window._fbShowAuthScreen && window._fbShowAuthScreen();
     }
   });
@@ -18247,6 +18316,9 @@ function cpFinishOnboarding(){
     renderPage(currentPage);
     updatePerfIndicator();
     if (typeof _renderFirebaseSidebarBadge === 'function') _renderFirebaseSidebarBadge(fbUser);
+    // Register session after onboarding completes
+    if (window._fbRegisterSession) window._fbRegisterSession(fbUser.uid).catch(()=>{});
+    if (window._fbStartSessionPoll) window._fbStartSessionPoll(fbUser.uid);
     toast('Welcome, ' + activeProfileName + ' ✓');
   } else {
     enterApp();
@@ -18357,10 +18429,18 @@ window._onFirebaseUser = async function(user) {
     if (backBtn) backBtn.style.display = 'none';
     const overlay = document.getElementById('createProfileOverlay');
     if (overlay) overlay.style.display = 'flex';
+    // Register session now so other devices get kicked immediately
+    if (window._fbRegisterSession) window._fbRegisterSession(user.uid).catch(()=>{});
+    if (window._fbStartSessionPoll) window._fbStartSessionPoll(user.uid);
     // Store user ref so cpFinishOnboarding can enter the app via Firebase path
     window._fbPendingUser = user;
     return; // Don't enter app yet — wait for onboarding completion
   }
+
+  // Register this session as the active one (kicks other sessions out)
+  if (window._fbRegisterSession) await window._fbRegisterSession(user.uid);
+  // Start polling to detect if another session takes over
+  if (window._fbStartSessionPoll) window._fbStartSessionPoll(user.uid);
 
   // Patch saveDB to also push to Firestore (debounced)
   _patchSaveDBForFirebase(user.uid);
@@ -18454,6 +18534,36 @@ function _renderFirebaseSidebarBadge(user) {
     <span style="font-size:10px;color:var(--text3)" title="Sign out">↗</span>
   `;
   bottom.insertBefore(badge, bottom.firstChild);
+
+  // ── Sync button — pull latest data from Firestore ──
+  const existing_sync = bottom.querySelector('#_fbSyncBtn');
+  if (existing_sync) existing_sync.remove();
+  const syncBtn = document.createElement('button');
+  syncBtn.id = '_fbSyncBtn';
+  syncBtn.textContent = '☁ Sync';
+  syncBtn.title = 'Pull latest data from cloud (useful after editing on another device)';
+  syncBtn.style.cssText = [
+    'width:100%',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'gap:6px',
+    'padding:8px 12px',
+    'border-radius:8px',
+    'border:1px solid rgba(var(--accent-rgb),0.35)',
+    'background:rgba(var(--accent-rgb),0.08)',
+    'color:var(--accent)',
+    'font-size:11px',
+    'font-weight:600',
+    'font-family:\'DM Sans\',sans-serif',
+    'cursor:pointer',
+    'transition:all 0.15s',
+    'margin-bottom:4px',
+  ].join(';');
+  syncBtn.onmouseenter = () => { syncBtn.style.background = 'rgba(var(--accent-rgb),0.16)'; };
+  syncBtn.onmouseleave = () => { syncBtn.style.background = 'rgba(var(--accent-rgb),0.08)'; };
+  syncBtn.onclick = () => window._fbManualSync && window._fbManualSync();
+  bottom.insertBefore(syncBtn, bottom.firstChild);
 
   // Hook saveDB now that user is available
   setTimeout(_fbHookSaveDB, 1000);
