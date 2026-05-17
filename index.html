@@ -12898,7 +12898,11 @@ function renderBudget(){
     const aIsAuto = (a.tags === 'subscription' || a.tags === 'recurring-template' || a.subId) ? 1 : 0;
     const bIsAuto = (b.tags === 'subscription' || b.tags === 'recurring-template' || b.subId) ? 1 : 0;
     if (aIsAuto !== bIsAuto) return aIsAuto - bIsAuto; // manual (0) floats above auto (1)
-    // 4️⃣ Within manual transactions: most recently added at top (highest id = newest)
+    // 4️⃣ Within same group: sort by actual date descending (newest date first, not insertion time)
+    const dateA = a.date || '';
+    const dateB = b.date || '';
+    if (dateB !== dateA) return dateB.localeCompare(dateA);
+    // 5️⃣ Same date: stable order by id
     return (b.id||0) - (a.id||0);
   }).map(t=>{
     const amt = +t.amount||0;
@@ -19941,12 +19945,22 @@ function loadCurrencyFromDB() {
   document.querySelectorAll('.currency-btn').forEach(b => {
     const cur = b.dataset.cur || b.textContent.trim();
     b.classList.toggle('active', cur === activeCurrency);
-    // Show the active currency button + MAD/EUR/USD always; show country-specific ones only if relevant
+    // Show currency buttons based on country context:
+    // - If user is using their country's native currency → only show that one button (no clutter)
+    // - If user has switched to a foreign currency → show native + active + EUR/USD so they can switch back
     const country = getActiveCountry();
     const profile = COUNTRY_PROFILES[country] || COUNTRY_PROFILES.MA;
-    const alwaysShow = ['MAD','EUR','USD'];
-    const countryShow = profile.currency;
-    b.style.display = (alwaysShow.includes(cur) || cur === countryShow || cur === activeCurrency) ? '' : 'none';
+    const nativeCurrency = profile.currency;
+    const usingNative = activeCurrency === nativeCurrency;
+    let show;
+    if (usingNative) {
+      // Only show the native currency button — hide EUR/USD/etc.
+      show = cur === nativeCurrency;
+    } else {
+      // User switched to a foreign currency: show native + active + EUR/USD as fallback
+      show = cur === nativeCurrency || cur === activeCurrency || cur === 'EUR' || cur === 'USD';
+    }
+    b.style.display = show ? '' : 'none';
   });
 }
 
