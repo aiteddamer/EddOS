@@ -12610,7 +12610,30 @@ function totalDebt(){
     return a + Math.max(0,bal);
   },0);
 }
-function activeSubs(){ return DB.subscriptions.filter(s=>s.status==='🟢 Active').length; }
+function activeSubs(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  return DB.subscriptions.filter(s => {
+    if (s.status !== '🟢 Active') return false;
+    // Exclude if cancelledOn is set and already passed
+    if (s.cancelledOn) {
+      const end = new Date(s.cancelledOn); end.setHours(0,0,0,0);
+      if (end < today) return false;
+    }
+    return true;
+  }).length;
+}
+function trueActiveSubs(){
+  // Same filter used for cost calculations — excludes ended subs
+  const today = new Date(); today.setHours(0,0,0,0);
+  return DB.subscriptions.filter(s => {
+    if (s.status !== '🟢 Active') return false;
+    if (s.cancelledOn) {
+      const end = new Date(s.cancelledOn); end.setHours(0,0,0,0);
+      if (end < today) return false;
+    }
+    return true;
+  });
+}
 
 // ─── DASHBOARD ──────────────────────────────────────────────────────────────
 let cashChart, catChart;
@@ -12682,7 +12705,7 @@ function renderDashboard(){
       { label:'Total Debt',          val:fmtC(td),                sub:`${DB.loans.filter(l=>l.name).length} active loans`,                                  icon:'💳', color:'var(--danger)',   cls:td>0?'negative':'' },
       { label:'Leave Balance',       val:lb.toFixed(1)+' days',   sub:`since ${getActiveCareerPos()?.start?.slice(0,7) || 'job start'}`,                                                  icon:'🌴', color:lb>=5?'var(--accent2)':lb>=0?'var(--warn)':'var(--deficit)' },
       { label:'Active Goals',        val:ag,                      sub:`${DB.goals.filter(g=>g.status==='✅ Achieved').length} achieved`,                     icon:'🎯', color:'var(--accent3)' },
-      { label:'Active Subs',         val:as,                      sub:`${fmtMAD(DB.subscriptions.filter(s=>s.status==='🟢 Active').reduce((a,s)=>a+(+s.amount||0),0))} MAD/mo`, icon:'🔄', color:'var(--accent2)' },
+      { label:'Active Subs',         val:as,                      sub:`${fmtMAD(trueActiveSubs().filter(s=>s.tier!=='free').reduce((a,s)=>a+(+s.amount||0),0))} MAD/mo`, icon:'🔄', color:'var(--accent2)' },
       { label:'Net Worth',           val:fmtC(nw),                sub:`Assets: ${fmtC(totalAssets)} · Debt: ${fmtC(td)}`,                                   icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
     ];
   } else {
@@ -12696,7 +12719,7 @@ function renderDashboard(){
       { label:'Total Debt',        val:fmtC(td),       sub:`${DB.loans.filter(l=>l.name).length} active loans`,             icon:'💳', color:'var(--danger)',                           cls:td>0?'negative':'' },
       { label:`Leave Balance`,     val:lb.toFixed(1)+' days', sub:`since ${getActiveCareerPos()?.start?.slice(0,7) || 'job start'}`,                     icon:'🌴', color:lb>=5?'var(--accent2)':lb>=0?'var(--warn)':'var(--deficit)' },
       { label:'Active Goals',      val:ag,             sub:`${DB.goals.filter(g=>g.status==='✅ Achieved').length} achieved`,icon:'🎯', color:'var(--accent3)' },
-      { label:'Active Subs',       val:as,             sub:`${fmtMAD(DB.subscriptions.filter(s=>s.status==='🟢 Active').reduce((a,s)=>a+(+s.amount||0),0))} MAD/mo`, icon:'🔄', color:'var(--accent2)' },
+      { label:'Active Subs',       val:as,             sub:`${fmtMAD(trueActiveSubs().filter(s=>s.tier!=='free').reduce((a,s)=>a+(+s.amount||0),0))} MAD/mo`, icon:'🔄', color:'var(--accent2)' },
       { label:'Net Worth',         val:fmtC(nw),       sub:`Assets: ${fmtC(totalAssets)} · Debt: ${fmtC(td)}`,              icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
     ];
   }
@@ -16227,25 +16250,60 @@ function renderSubs(){
       </div>`
     : '';
 
-  // ── By category breakdown ─────────────────────────────────────────────────
-  const catMap = {}; // cat -> { total, count }
-  active.filter(s=>s.tier!=='free').forEach(s => {
-    if (!catMap[s.cat]) catMap[s.cat] = { total: 0, count: 0 };
-    catMap[s.cat].total += +s.amount||0;
+  // ── By category breakdown — only months each sub was actually active ──────
+  const catMap = {}; // cat -> { realCost, count }
+  const today2 = new Date(); today2.setHours(0,0,0,0);
+
+  active.filter(s => s.tier !== 'free').forEach(s => {
+    if (!catMap[s.cat]) catMap[s.cat] = { realCost: 0, count: 0 };
+
+    // Work out how many months of this year the sub was (or is) actually running
+    const amount = +s.amount || 0;
+    let activeMonths = 0;
+
+    if (yr) {
+      // Single-year mode: count Jan–Dec of `yr`, clipped to sub start/end
+      const subStart = s.start ? new Date(s.start) : new Date(yr, 0, 1);
+      // End: cancelledOn if cancelled, or today if in current year, or Dec 31 of yr
+      let subEnd;
+      if (s.cancelledOn) {
+        subEnd = new Date(s.cancelledOn);
+      } else if (yr === today2.getFullYear()) {
+        subEnd = today2;
+      } else {
+        subEnd = new Date(yr, 11, 31);
+      }
+      // Count months in range [Jan yr … Dec yr] that overlap [subStart … subEnd]
+      for (let m = 0; m < 12; m++) {
+        const mStart = new Date(yr, m, 1);
+        const mEnd   = new Date(yr, m + 1, 0); // last day of month
+        if (mStart > subEnd) break;           // sub ended before this month
+        if (mEnd < subStart) continue;        // sub hadn't started yet
+        activeMonths++;
+      }
+    } else {
+      // All-years mode: just show the flat monthly rate (current ongoing cost)
+      activeMonths = 1;
+    }
+
+    catMap[s.cat].realCost += amount * activeMonths;
     catMap[s.cat].count++;
   });
-  const catEntries = Object.entries(catMap).sort((a,b) => b[1].total - a[1].total);
-  const maxCatTotal = catEntries.length ? catEntries[0][1].total : 1;
+
+  const catEntries = Object.entries(catMap).sort((a,b) => b[1].realCost - a[1].realCost);
+  const maxCatTotal = catEntries.length ? catEntries[0][1].realCost : 1;
+  const catYearLabel = yr ? String(yr) : 'Monthly';
+
   const catBreakdown = catEntries.length > 1 ? `
     <div style="margin-bottom:20px;padding:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:12px">💳 Cost by Category</div>
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:12px">💳 Cost by Category · ${catYearLabel}</div>
       ${catEntries.map(([cat, d]) => `
         <div style="margin-bottom:10px">
           <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
             <span style="color:var(--text2)">${cat} <span style="color:var(--text3);font-size:10px">(${d.count})</span></span>
-            <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--accent3)">${fmt(d.total)}/mo · ${fmt(d.total*12)}/yr</span>
+            <span style="font-family:'DM Mono',monospace;font-weight:700;color:var(--accent3)">${yr ? fmt(d.realCost)+' total' : fmt(d.realCost)+'/mo'}</span>
           </div>
-          <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(d.total/maxCatTotal*100)}%"></div></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(d.realCost/maxCatTotal*100)}%"></div></div>
         </div>`).join('')}
     </div>` : '';
 
