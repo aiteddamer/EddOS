@@ -2354,7 +2354,7 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
     <!-- Google button -->
     <button id="_fbGoogleBtn" onclick="window._fbSignIn && window._fbSignIn()"
       style="
-        display:flex;align-items:center;gap:12px;
+        display:none;align-items:center;gap:12px;
         padding:13px 20px;border-radius:10px;
         border:1px solid var(--border2);
         background:var(--surface);color:var(--text);
@@ -2378,14 +2378,14 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
     </button>
 
     <!-- Divider -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+    <div id="_fbDivider" style="display:none;align-items:center;gap:10px;margin-bottom:12px">
       <div style="flex:1;height:1px;background:var(--border)"></div>
       <span style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap">or use email</span>
       <div style="flex:1;height:1px;background:var(--border)"></div>
     </div>
 
     <!-- Email form -->
-    <div id="_fbEmailForm" style="display:flex;flex-direction:column;gap:10px">
+    <div id="_fbEmailForm" style="display:none;flex-direction:column;gap:10px">
       <!-- Name field (sign-up only) -->
       <input id="_fbNameInput" type="text" placeholder="Full name" autocomplete="name"
         style="
@@ -2451,8 +2451,8 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
       </div>
     </div>
 
-    <!-- Loading spinner -->
-    <div id="_fbLoadingState" style="display:none;flex-direction:column;align-items:center;gap:12px;padding:20px 0">
+    <!-- Loading spinner — shown immediately; hidden only if user is not signed in -->
+    <div id="_fbLoadingState" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px 0">
       <div style="
         width:28px;height:28px;border-radius:50%;
         border:3px solid var(--border2);
@@ -2460,7 +2460,7 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
         animation:_fbSpin 0.7s linear infinite;
       "></div>
       <div style="font-size:12px;color:var(--text3);font-family:'DM Mono',monospace" id="_fbLoadingMsg">
-        Signing you in…
+        Syncing from cloud…
       </div>
     </div>
 
@@ -11883,13 +11883,26 @@ const _debouncedRender = debounce(() => renderPage(currentPage), 350);
 // saveDB: write current year's data back into the in-memory _mirror
 // (actual persistence happens via localStorage on every save, and via exportFile for portability)
 const _debouncedLSSave = debounce(() => {
+  // Stamp the save time INTO _mirror so it survives across sessions and devices
+  _mirror._lastSync = Date.now();
   try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); }
   catch(e) { console.warn('localStorage save failed', e); }
   // Also push to Firestore if signed in
   if (window._fbCurrentUser && window._fbSaveUserData) {
-    window._fbSaveUserData(window._fbCurrentUser.uid, { _mirror, _lastSync: Date.now() }).catch(()=>{});
+    window._fbSaveUserData(window._fbCurrentUser.uid, { _mirror, _lastSync: _mirror._lastSync }).catch(()=>{});
   }
 }, 2000); // 2s debounce — localStorage.setItem is sync/blocking, don't hammer it
+
+// ── Flush any pending in-memory changes before the tab/browser closes ──
+// This prevents data loss when the user closes the tab before the 2s debounce fires.
+window.addEventListener('beforeunload', () => {
+  _mirror._lastSync = Date.now();
+  try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
+  // Best-effort Firestore write (browser may not wait, but localStorage above is sync)
+  if (window._fbCurrentUser && window._fbSaveUserData) {
+    window._fbSaveUserData(window._fbCurrentUser.uid, { _mirror, _lastSync: _mirror._lastSync }).catch(()=>{});
+  }
+});
 
 const _debouncedFileSave = debounce(() => { _writeToFile(); }, 2000);
 
@@ -18557,17 +18570,15 @@ window._fbShowAuthScreen = function() {
     el.style.opacity = '1';
     el.style.visibility = 'visible';
     el.style.pointerEvents = 'auto';
-    // Show sign-in button + email form, hide spinner
+    // Show sign-in button + email form + divider, hide spinner
     const btn   = document.getElementById('_fbGoogleBtn');
     const spin  = document.getElementById('_fbLoadingState');
     const form  = document.getElementById('_fbEmailForm');
-    const div   = el.querySelector('[style*="or use email"]')?.parentElement;
-    if (btn)  btn.style.display = 'flex';
-    if (spin) spin.style.display = 'none';
-    if (form) form.style.display = 'flex';
-    // Show divider row (the "or use email" separator)
-    const dividers = el.querySelectorAll('[style*="or use email"]');
-    dividers.forEach(d => { if(d.parentElement) d.parentElement.style.display = 'flex'; });
+    const divEl = document.getElementById('_fbDivider');
+    if (btn)   btn.style.display = 'flex';
+    if (spin)  spin.style.display = 'none';
+    if (form)  form.style.display = 'flex';
+    if (divEl) divEl.style.display = 'flex';
   }
   document.getElementById('main').style.visibility = 'hidden';
   document.getElementById('sidebar').style.visibility = 'hidden';
@@ -18594,7 +18605,7 @@ window._onFirebaseUser = async function(user) {
   const err  = document.getElementById('_fbErrMsg');
   if (btn)  btn.style.display = 'none';
   if (spin) spin.style.display = 'flex';
-  if (msg)  msg.textContent = 'Loading your data…';
+  if (msg)  msg.textContent = 'Connecting to cloud…';
   if (err)  err.textContent = '';
   // Hide email form while loading
   const emailForm = document.getElementById('_fbEmailForm');
@@ -18609,24 +18620,68 @@ window._onFirebaseUser = async function(user) {
     await new Promise(r => setTimeout(r, 100));
   }
 
-  // Try to load data from Firestore
+  // ── Always fetch from Firestore first — retry until data arrives or max attempts ──
+  // App will NOT open until cloud data is successfully retrieved.
+  if (msg) msg.textContent = 'Connecting to cloud…';
   let fsData = null;
-  if (window._fbLoadUserData) {
-    fsData = await window._fbLoadUserData(user.uid);
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 2000; // ms between retries
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      if (msg) msg.textContent = attempt === 1 ? 'Syncing from cloud…' : `Syncing from cloud… (attempt ${attempt}/${MAX_RETRIES})`;
+      if (window._fbLoadUserData) {
+        fsData = await window._fbLoadUserData(user.uid);
+      }
+      // Got a response (even null = new user) — stop retrying
+      break;
+    } catch(e) {
+      console.warn(`[EddOS] Firestore fetch attempt ${attempt} failed:`, e);
+      if (attempt < MAX_RETRIES) {
+        if (msg) msg.textContent = `Cloud unreachable — retrying (${attempt}/${MAX_RETRIES})…`;
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+      } else {
+        // All retries exhausted — block the app and show a retry button
+        if (msg) msg.textContent = 'Could not reach cloud.';
+        if (spin) spin.style.display = 'none';
+        const errEl2 = document.getElementById('_fbErrMsg');
+        if (errEl2) errEl2.innerHTML = '⚠️ Unable to sync your data from cloud.<br>Please check your connection.<br><br>'
+          + '<button onclick="location.reload()" style="padding:10px 22px;border-radius:8px;border:none;background:var(--accent);color:#000;font-size:13px;font-weight:700;cursor:pointer">↺ Retry</button>';
+        _fbDataLoaded = false; // allow retry on reload
+        return; // block app — do not open
+      }
+    }
   }
 
-  // Priority: Firestore data > FILE_DATA (embedded) > empty
+  // ── Cloud data loaded — apply it. Cloud is always the source of truth. ──
   if (fsData && fsData._mirror && fsData._mirror.userName) {
-    // Restore from Firestore — existing user with real data
+    if (msg) msg.textContent = 'Loading your data…';
     try {
-      Object.assign(_mirror, fsData._mirror);
-      // Re-derive activeProfile from Firestore data
-      activeProfileName  = fsData._mirror.userName  || user.displayName || user.email || 'User';
-      activeProfileEmoji = fsData._mirror.userEmoji || '👤';
-      activeProfilePin   = null;  // no PIN needed — Google auth handles security
+      // Cloud always wins. If local had newer unsaved changes, push them up first.
+      const cloudTs = fsData._lastSync || fsData._mirror._lastSync || 0;
+      const localTs = _mirror._lastSync || 0;
+      if (localTs > cloudTs) {
+        // Local is newer (unsaved changes survived via beforeunload) — upload then use local
+        if (msg) msg.textContent = 'Uploading local changes…';
+        console.info('[EddOS] Local data is newer — uploading to Firestore before entering app');
+        _mirror._lastSync = localTs;
+        if (window._fbSaveUserData) {
+          await window._fbSaveUserData(user.uid, { _mirror, _lastSync: localTs });
+        }
+        // Now re-fetch so _mirror reflects the confirmed cloud state
+        try { fsData = await window._fbLoadUserData(user.uid); } catch(e) {}
+      }
+      // Apply cloud data
+      if (msg) msg.textContent = 'Syncing from cloud…';
+      Object.assign(_mirror, (fsData && fsData._mirror) ? fsData._mirror : _mirror);
+      _mirror._lastSync = Math.max(cloudTs, localTs);
+      // Re-derive activeProfile
+      activeProfileName  = _mirror.userName  || user.displayName || user.email || 'User';
+      activeProfileEmoji = _mirror.userEmoji || '👤';
+      activeProfilePin   = null;
     } catch(e) { console.warn('Firestore data restore error', e); }
   } else if (FILE_DATA && FILE_DATA.userName) {
     // First login — seed Firestore with embedded FILE_DATA (only if it has real user data)
+    if (msg) msg.textContent = 'Setting up your account…';
     activeProfileName  = FILE_DATA.userName  || user.displayName || user.email || 'User';
     activeProfileEmoji = FILE_DATA.userEmoji || '👤';
     activeProfilePin   = null;
