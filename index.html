@@ -13209,11 +13209,25 @@ function renderMonthly(){
   allMonths.forEach(m=>{ mt[m]={income:0,expenses:0,net:0}; });
   DB.transactions.forEach(t=>{
     if(!t.month||!mt[t.month]) return;
-    if(t.type==='💰 Income') mt[t.month].income += +t.amount||0;
-    else mt[t.month].expenses += +t.amount||0;
+    // Exclude Credit/Loan from savings rate — they are balance-sheet movements, not real income/spending
+    const isCreditLoan = (t.category||'').includes('Credit/Loan');
+    if(t.type==='💰 Income') {
+      mt[t.month].income += +t.amount||0;
+      if(!isCreditLoan) mt[t.month].incomeReal = (mt[t.month].incomeReal||0) + (+t.amount||0);
+    } else {
+      mt[t.month].expenses += +t.amount||0;
+      if(!isCreditLoan) mt[t.month].expensesReal = (mt[t.month].expensesReal||0) + (+t.amount||0);
+    }
   });
   // NOTE: Subscriptions are already in transactions (syncSubToLedger). Don't add again.
-  allMonths.forEach(m=>mt[m].net = mt[m].income - mt[m].expenses);
+  allMonths.forEach(m=>{
+    mt[m].net = mt[m].income - mt[m].expenses;
+    // Net and rate for savings % uses only real (non-loan) flows
+    const ri = mt[m].incomeReal || 0;
+    const re = mt[m].expensesReal || 0;
+    mt[m].netReal = ri - re;
+    mt[m].incomeReal = ri;
+  });
   
   const today2 = new Date();
   const curM = MO_NAMES[today2.getMonth()] + ' ' + today2.getFullYear();
@@ -13230,9 +13244,10 @@ function renderMonthly(){
     const s = noData?'No Data':d.net<0?'Deficit':'Surplus';
     const sc = s==='Surplus'?'tag-surplus':s==='Deficit'?'tag-deficit':'tag-nodata';
     const icon = s==='Surplus'?'✅':s==='Deficit'?'⚠️':'—';
-    const sr = d.income>0?d.net/d.income:0;
-    const barW = Math.max(0,Math.min(100,sr*100));
-    const barC = sr>=0.3?'var(--surplus)':sr>=0?'var(--warn)':'var(--deficit)';
+    const savingsTarget = +getYearSavingsSettings().savingsTarget || 0;
+    const sr = savingsTarget > 0 ? d.netReal / savingsTarget : (d.incomeReal > 0 ? d.netReal / d.incomeReal : 0);
+    const barW = Math.max(0, Math.min(100, sr * 100));
+    const barC = sr >= 1 ? 'var(--surplus)' : sr >= 0.5 ? 'var(--warn)' : sr >= 0 ? 'var(--accent)' : 'var(--deficit)';
     // Sub cost for this specific month (only active subs that started on/before this month)
     const [mName, mYr] = m.split(' ');
     const mDate = new Date(+mYr, MO_NAMES.indexOf(mName), 1);
@@ -13244,7 +13259,7 @@ function renderMonthly(){
       <td class="amount-pos">${fmt(d.income)}</td>
       <td class="amount-neg">${fmt(d.expenses)}</td>
       <td class="${d.net>=0?'amount-pos':'amount-neg'}">${noData?'—':fmt(d.net)}</td>
-      <td style="min-width:80px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barC};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${d.income>0?pct(sr):'—'}</span></div></td>
+      <td style="min-width:80px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barC};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${(savingsTarget>0||d.incomeReal>0)?pct(sr):'—'}</span></div></td>
       <td class="amount-neu">${fmt(subCost)}</td>
       <td><span class="tag ${sc}">${icon} ${s}</span></td>
     </tr>`;
