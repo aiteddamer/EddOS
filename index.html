@@ -15757,48 +15757,62 @@ function renderLeave(){
   // Save the synced bonusMonths back
   saveDB();
   
-  // Leave entries list — show ALL years, grouped by year with section headers
+  // Leave entries list — grouped by year when 'all' view, filtered to leaveYr otherwise
+  const _isAllView = activeYear === 'all';
   const _allEntries = getAllLeaveEntries().sort((a,b) => {
     const da = a.startDate || (a.month ? a.month.split(' ')[1]+'-'+String(MO_NAMES.indexOf(a.month.split(' ')[0])+1).padStart(2,'0')+'-01' : '');
     const db2 = b.startDate || (b.month ? b.month.split(' ')[1]+'-'+String(MO_NAMES.indexOf(b.month.split(' ')[0])+1).padStart(2,'0')+'-01' : '');
     return db2.localeCompare(da); // descending — newest first
   });
-  // Group by year
-  const _entriesByYear = {};
-  _allEntries.forEach(e => {
-    const rd = e.startDate ? new Date(e.startDate)
-      : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
-    const yr = rd ? rd.getFullYear() : 'Unknown';
-    if (!_entriesByYear[yr]) _entriesByYear[yr] = [];
-    _entriesByYear[yr].push(e);
-  });
-  const _sortedYears = Object.keys(_entriesByYear).sort((a,b) => b - a); // descending
-  const entryRows = _sortedYears.map(yr => {
-    const yearEntries = _entriesByYear[yr];
-    const yearRows = yearEntries.map(e => {
-      const delKey = e.id ? `'${e.id}'` : DB.leaveEntries.indexOf(e);
-      const delFn  = e.id ? `deleteLeaveEntryById(${delKey})` : `deleteLeaveEntry(${delKey})`;
-      const editFn = e.id ? `openLeaveModalEdit(${delKey})` : '';
-      const label = e.startDate ? `${e.startDate} → ${e.endDate||e.startDate}` : e.month;
-      const days = e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : e.days;
-      return `<tr>
-        <td>${label}</td>
-        <td><span class="tag ${e.type==='Sick Day'?'tag-pending':'tag-paid'}">${e.type||'Annual Leave'}</span></td>
-        <td class="amount-neg">${days} days</td>
-        <td style="color:var(--text3);font-size:11px">${e.note||''}</td>
-        <td style="white-space:nowrap">
-          ${editFn ? `<button onclick="${editFn}" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 5px;font-size:12px" title="Edit" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">✏️</button>` : ''}
-          <button onclick="${delFn}" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 5px;font-size:12px" title="Delete" onmouseover="this.style.color='var(--deficit)'" onmouseout="this.style.color='var(--text3)'">✕</button>
-        </td>
-      </tr>`;
+  // Helper: render a single entry row
+  function _leaveEntryRow(e) {
+    const delKey = e.id ? `'${e.id}'` : DB.leaveEntries.indexOf(e);
+    const delFn  = e.id ? `deleteLeaveEntryById(${delKey})` : `deleteLeaveEntry(${delKey})`;
+    const editFn = e.id ? `openLeaveModalEdit(${delKey})` : '';
+    const label = e.startDate ? `${e.startDate} → ${e.endDate||e.startDate}` : e.month;
+    const days = e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : e.days;
+    return `<tr>
+      <td>${label}</td>
+      <td><span class="tag ${e.type==='Sick Day'?'tag-pending':'tag-paid'}">${e.type||'Annual Leave'}</span></td>
+      <td class="amount-neg">${days} days</td>
+      <td style="color:var(--text3);font-size:11px">${e.note||''}</td>
+      <td style="white-space:nowrap">
+        ${editFn ? `<button onclick="${editFn}" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 5px;font-size:12px" title="Edit" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text3)'">✏️</button>` : ''}
+        <button onclick="${delFn}" style="background:none;border:none;color:var(--text3);cursor:pointer;padding:2px 5px;font-size:12px" title="Delete" onmouseover="this.style.color='var(--deficit)'" onmouseout="this.style.color='var(--text3)'">✕</button>
+      </td>
+    </tr>`;
+  }
+  let entryRows = '';
+  const _leaveListTitle = _isAllView ? 'All Leave Entries' : `${leaveYr} Leave Entries`;
+  if (_isAllView) {
+    // Group all entries by year with year-header rows
+    const _entriesByYear = {};
+    _allEntries.forEach(e => {
+      const rd = e.startDate ? new Date(e.startDate)
+        : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
+      const yr = rd ? rd.getFullYear() : 'Unknown';
+      if (!_entriesByYear[yr]) _entriesByYear[yr] = [];
+      _entriesByYear[yr].push(e);
+    });
+    const _sortedYears = Object.keys(_entriesByYear).sort((a,b) => b - a); // descending
+    entryRows = _sortedYears.map(yr => {
+      const yearRows = _entriesByYear[yr].map(_leaveEntryRow).join('');
+      const yrDays = _entriesByYear[yr].reduce((s, e) => s + (e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : (+e.days||0)), 0);
+      return `<tr><td colspan="5" style="padding:10px 4px 4px;border-bottom:1px solid var(--border)">
+        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:'DM Mono',monospace">
+          ${yr} <span style="opacity:0.6;font-weight:400">· ${yrDays} days total</span>
+        </span>
+      </td></tr>${yearRows}`;
     }).join('');
-    const isLeaveYr = +yr === leaveYr;
-    return `<tr><td colspan="5" style="padding:10px 4px 4px;border-bottom:1px solid var(--border)">
-      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:${isLeaveYr?'var(--accent)':'var(--text3)'};font-family:'DM Mono',monospace">
-        ${yr}${isLeaveYr?' ← current view year':''}
-      </span>
-    </td></tr>${yearRows}`;
-  }).join('');
+  } else {
+    // Only show entries for the current leaveYr — no year header needed
+    const _yearEntries = _allEntries.filter(e => {
+      const rd = e.startDate ? new Date(e.startDate)
+        : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
+      return rd && rd.getFullYear() === leaveYr;
+    });
+    entryRows = _yearEntries.map(_leaveEntryRow).join('');
+  }
 
   // Inject calendar strip
   const tableCard = document.getElementById('leaveTable').closest('.table-card');
@@ -15820,7 +15834,7 @@ function renderLeave(){
       ${upcoming.map(e=>`<div style="font-size:12px;margin-bottom:3px">${e.startDate} → ${e.endDate||e.startDate} · <span style="color:var(--text2)">${e.type}</span>${e.note?` · ${e.note}`:''}</div>`).join('')}
     </div>`:''}
     <div style="margin-bottom:8px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">All Leave Entries</div>
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">${_leaveListTitle}</div>
       <table style="width:100%;font-size:12px">
         <thead><tr><th>Period</th><th>Type</th><th>Days</th><th>Note</th><th></th></tr></thead>
         <tbody>${entryRows||'<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px">No leave logged yet</td></tr>'}</tbody>
