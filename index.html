@@ -13244,13 +13244,16 @@ function renderMonthly(){
     const s = noData?'No Data':d.net<0?'Deficit':'Surplus';
     const sc = s==='Surplus'?'tag-surplus':s==='Deficit'?'tag-deficit':'tag-nodata';
     const icon = s==='Surplus'?'✅':s==='Deficit'?'⚠️':'—';
-    const savingsTarget = +getYearSavingsSettings().savingsTarget || 0;
+    // Look up the savings target for the specific year of this row
+    const [mName, mYr] = m.split(' ');
+    const rowYr = +mYr;
+    const rowYd = (_mirror && _mirror.years && _mirror.years[rowYr]) ? _mirror.years[rowYr] : null;
+    const rowYs = (rowYd && rowYd.savingsSettings) ? rowYd.savingsSettings : {};
+    const savingsTarget = rowYs.savingsTarget !== undefined ? +rowYs.savingsTarget : (+DB.settings.savingsTarget || 0);
     const sr = savingsTarget > 0 ? d.netReal / savingsTarget : (d.incomeReal > 0 ? d.netReal / d.incomeReal : 0);
     const barW = Math.max(0, Math.min(100, sr * 100));
     const barC = sr >= 1 ? 'var(--surplus)' : sr >= 0.5 ? 'var(--warn)' : sr >= 0 ? 'var(--accent)' : 'var(--deficit)';
-    // Sub cost for this specific month (only active subs that started on/before this month)
-    const [mName, mYr] = m.split(' ');
-    const mDate = new Date(+mYr, MO_NAMES.indexOf(mName), 1);
+    const mDate = new Date(rowYr, MO_NAMES.indexOf(mName), 1);
     const subCost = DB.subscriptions.filter(s2=>s2.status==='🟢 Active' && (!s2.start || new Date(s2.start) <= mDate)).reduce((a,s2)=>a+(+s2.amount||0),0);
     if(!noData) cumNet += d.net;
     const isCur = m === curM;
