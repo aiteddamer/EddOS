@@ -15527,7 +15527,7 @@ function renderLeave(){
     if (!refDate) return a;
     if (contextAnchor && refDate < contextAnchor) return a;
     if (contextEnd && refDate > contextEnd) return a;
-    return a + (e.days ? +e.days : (e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : 0));
+    return a + (e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : (e.days ? +e.days : 0));
   }, 0);
 
   // For KPI display: leave taken THIS view year at this job
@@ -15538,7 +15538,7 @@ function renderLeave(){
   });
   const totalCongeTakenThisYear = yearLeaveEntries
     .filter(e => e.type !== 'Sick Day')
-    .reduce((a, e) => a + (e.days ? +e.days : (e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : 0)), 0);
+    .reduce((a, e) => a + (e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : (e.days ? +e.days : 0)), 0);
   const totalSickTaken = yearLeaveEntries.filter(e=>e.type==='Sick Day').reduce((a,e)=>a+(+e.days||1),0);
 
   const remaining = totalAccrued - totalCongeTakenAtJob;
@@ -15619,13 +15619,19 @@ function renderLeave(){
         const scanPosEnd   = scanPos.end ? new Date(scanPos.end) : null;
         const scanAnchor   = _accrualAnchor(scanPosStart);
         const scanAccrual  = getPolicyAccrual(scanPos);
-        // Last month rule: earns if job ended during or after this month
-        const elapsed = scanPosEnd ? (scanPosEnd >= scanMo) : (scanEnd <= today);
-        // Anniversary day check for partial current month
-        const scanAnniversaryUnlocked = _monthAccrualUnlocked(scanMo, scanAnchor);
-        const scanMonthStart = new Date(scanAnchor.getFullYear(), scanAnchor.getMonth(), 1);
-        if (scanMo >= scanMonthStart && !scanPosEnd && (elapsed || scanAnniversaryUnlocked)) cum += scanAccrual;
-        else if (scanMo >= scanMonthStart && scanPosEnd && elapsed) cum += scanAccrual;
+        const scanAnchorMonthStart = new Date(scanAnchor.getFullYear(), scanAnchor.getMonth(), 1);
+        const scanPosMonthStart = new Date(scanPosStart.getFullYear(), scanPosStart.getMonth(), 1);
+        // Skip the partial start month (joined mid-month before anchor) — no accrual
+        const scanIsPartialStart = scanMo < scanAnchorMonthStart && scanMo >= scanPosMonthStart;
+        const scanIsLastMonth = scanPosEnd && scanPosEnd >= scanMo && scanPosEnd <= scanEnd;
+        if (!scanIsPartialStart) {
+          // Last month rule: earns if job ended during or after this month
+          const elapsed = scanPosEnd ? (scanPosEnd >= scanMo) : (scanEnd <= today);
+          // Anniversary day check for partial current month
+          const scanAnniversaryUnlocked = _monthAccrualUnlocked(scanMo, scanAnchor);
+          const scanMonthAccrues = (scanMo >= scanAnchorMonthStart && (elapsed || scanAnniversaryUnlocked)) || scanIsLastMonth;
+          if (scanMonthAccrues) cum += scanAccrual;
+        }
       }
       // Accumulate leave taken in this prior month
       const priorYr = scanMo.getFullYear();
@@ -15636,14 +15642,14 @@ function renderLeave(){
         const refDate = e.startDate ? new Date(e.startDate)
           : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
         if (refDate && refDate.getFullYear() === priorYr && refDate.getMonth() === scanMo.getMonth()) {
-          cumLeave += e.days ? +e.days : (e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : 0);
+          cumLeave += e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : (e.days ? +e.days : 0);
         }
       });
       scanMo = new Date(scanMo.getFullYear(), scanMo.getMonth() + 1, 1);
     }
   }
 
-  let lastPosId = null; // track job changes to reset cumulative
+  let lastPosId = '__init__'; // track job changes to reset cumulative (use sentinel to avoid wiping pre-seeded cum on first month)
 
   const rows = LEAVE_MONTHS.map((m, i) => {
     const moDate    = new Date(leaveYr, i, 1);
@@ -15654,13 +15660,14 @@ function renderLeave(){
     // Find which job covers this month
     const monthPos = getPosForMonth(moDate, moEndDate);
 
-    // If job changed since last month, reset cumulative totals
+    // Only reset cumulative when genuinely switching between two different jobs mid-year.
+    // The sentinel '__init__' prevents wiping the pre-seeded carry-over on the very first month.
     const thisPosId = monthPos ? (monthPos.id || monthPos.company) : null;
-    if (thisPosId !== lastPosId) {
+    if (lastPosId !== '__init__' && thisPosId !== lastPosId) {
       cum = 0;
       cumLeave = 0;
-      lastPosId = thisPosId;
     }
+    lastPosId = thisPosId;
 
     if (!monthPos) {
       // No job covers this month at all
@@ -15693,17 +15700,10 @@ function renderLeave(){
     const monthAccrues = (!isPartialStart && moDate >= mAnchorMonthStart && (elapsed || anniversaryUnlocked) && !isFuture) || isLastMonth;
     const dayAcc = monthAccrues ? mAccrual : 0;
     cum += dayAcc;
+    cumLeave += congeInMonth;
 
-    // Only count leave for months belonging to the SAME job (reset on job change)
-    const leaveThisJobSoFar = LEAVE_MONTHS.slice(0, i + 1).reduce((a2, mm2, j2) => {
-      const mm2Date   = new Date(leaveYr, j2, 1);
-      const mm2End    = new Date(leaveYr, j2 + 1, 0);
-      const mm2Pos    = getPosForMonth(mm2Date, mm2End);
-      const mm2PosId  = mm2Pos ? (mm2Pos.id || mm2Pos.company) : null;
-      if (mm2PosId !== thisPosId) return a2;           // different job — skip
-      return a2 + calcLeaveForMonth(mm2);
-    }, 0);
-    const balEnd = cum - leaveThisJobSoFar;
+    // Balance = total accrued (carry-over + this year) minus total leave taken (carry-over + this year)
+    const balEnd = cum - cumLeave;
 
     let status, statusCls;
     if (isPartialStart) {
