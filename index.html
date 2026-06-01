@@ -15607,11 +15607,12 @@ function renderLeave(){
   // • Full month worked at anchor or later → ✅ Worked (earns accrual)
   // • Future month → ⏳ Pending
 
-  // Pre-seed cum + cumLeave with everything accrued/taken BEFORE the first viewed year
-  let cum = 0;
-  let cumLeave = 0;
+  // Pre-seed per-position cumulative totals for everything BEFORE the first viewed year.
+  // Each position gets its own { cum, cumLeave } so companies never bleed into each other.
+  const _posCum = {}; // posId → { cum, cumLeave }
+  const _getPosKey = p => p ? String(p.id || p.company || '') : '__none__';
+
   const viewYrStart = new Date(_leaveYears[0], 0, 1);
-  // Walk from the earliest job start up to Jan 1 of the first viewed year
   const earliestStart = allPositions.length ? new Date(allPositions[0].start) : null;
   if (earliestStart) {
     let scanMo = new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
@@ -15619,41 +15620,44 @@ function renderLeave(){
       const scanEnd = new Date(scanMo.getFullYear(), scanMo.getMonth() + 1, 0);
       const scanPos = getPosForMonth(scanMo, scanEnd);
       if (scanPos) {
+        const scanKey = _getPosKey(scanPos);
+        if (!_posCum[scanKey]) _posCum[scanKey] = { cum: 0, cumLeave: 0 };
         const scanPosStart = new Date(scanPos.start);
         const scanPosEnd   = scanPos.end ? new Date(scanPos.end) : null;
         const scanAnchor   = _accrualAnchor(scanPosStart);
         const scanAccrual  = getPolicyAccrual(scanPos);
         const scanAnchorMonthStart = new Date(scanAnchor.getFullYear(), scanAnchor.getMonth(), 1);
         const scanPosMonthStart = new Date(scanPosStart.getFullYear(), scanPosStart.getMonth(), 1);
-        // Skip the partial start month (joined mid-month before anchor) — no accrual
         const scanIsPartialStart = scanMo < scanAnchorMonthStart && scanMo >= scanPosMonthStart;
         const scanIsLastMonth = scanPosEnd && scanPosEnd >= scanMo && scanPosEnd <= scanEnd;
         if (!scanIsPartialStart) {
-          // Last month rule: earns if job ended during or after this month
           const elapsed = scanPosEnd ? (scanPosEnd >= scanMo) : (scanEnd <= today);
-          // Anniversary day check for partial current month
           const scanAnniversaryUnlocked = _monthAccrualUnlocked(scanMo, scanAnchor);
           const scanMonthAccrues = (scanMo >= scanAnchorMonthStart && (elapsed || scanAnniversaryUnlocked)) || scanIsLastMonth;
-          if (scanMonthAccrues) cum += scanAccrual;
+          if (scanMonthAccrues) _posCum[scanKey].cum += scanAccrual;
         }
+        // Accumulate leave for this position in this prior month
+        const priorYr = scanMo.getFullYear();
+        const priorMirror = (_mirror.years && _mirror.years[priorYr]) ? _mirror.years[priorYr] : null;
+        const priorLeaveArr = priorMirror ? (priorMirror.leaveEntries || []) : [];
+        priorLeaveArr.forEach(e => {
+          if (e.type === 'Sick Day') return;
+          const refDate = e.startDate ? new Date(e.startDate)
+            : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
+          if (refDate && refDate.getFullYear() === priorYr && refDate.getMonth() === scanMo.getMonth()) {
+            _posCum[scanKey].cumLeave += e.startDate
+              ? calcLeaveCostWeighted(e.startDate, e.endDate||e.startDate, getPolicyWeights(scanPos))
+              : (e.days ? +e.days : 0);
+          }
+        });
       }
-      // Accumulate leave taken in this prior month
-      const priorYr = scanMo.getFullYear();
-      const priorMirror = (_mirror.years && _mirror.years[priorYr]) ? _mirror.years[priorYr] : null;
-      const priorLeaveArr = priorMirror ? (priorMirror.leaveEntries || []) : (priorYr === leaveYr ? DB.leaveEntries : []);
-      priorLeaveArr.forEach(e => {
-        if (e.type === 'Sick Day') return;
-        const refDate = e.startDate ? new Date(e.startDate)
-          : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
-        if (refDate && refDate.getFullYear() === priorYr && refDate.getMonth() === scanMo.getMonth()) {
-          cumLeave += e.startDate ? countWorkingDays(e.startDate, e.endDate||e.startDate) : (e.days ? +e.days : 0);
-        }
-      });
       scanMo = new Date(scanMo.getFullYear(), scanMo.getMonth() + 1, 1);
     }
   }
 
-  let lastPosId = '__init__'; // track job changes to reset cumulative (use sentinel to avoid wiping pre-seeded cum on first month)
+  // Running totals per position — start from pre-seeded values
+  const _posRunning = {}; // posId → { cum, cumLeave }
+  let lastPosKey = null;
 
   const rows = LEAVE_MONTHS.map((m, i) => {
     const [_mName, _mYrStr] = m.split(' ');
@@ -15670,12 +15674,16 @@ function renderLeave(){
 
     // Only reset cumulative when genuinely switching between two different jobs mid-year.
     // The sentinel '__init__' prevents wiping the pre-seeded carry-over on the very first month.
-    const thisPosId = monthPos ? (monthPos.id || monthPos.company) : null;
-    if (lastPosId !== '__init__' && thisPosId !== lastPosId) {
-      cum = 0;
-      cumLeave = 0;
+    const thisPosKey = _getPosKey(monthPos);
+    // Initialise this position's running totals from pre-seeded values on first encounter
+    if (!_posRunning[thisPosKey]) {
+      _posRunning[thisPosKey] = {
+        cum: (_posCum[thisPosKey] ? _posCum[thisPosKey].cum : 0),
+        cumLeave: (_posCum[thisPosKey] ? _posCum[thisPosKey].cumLeave : 0),
+      };
     }
-    lastPosId = thisPosId;
+    lastPosKey = thisPosKey;
+    const _pr = _posRunning[thisPosKey];
 
     if (!monthPos) {
       // No job covers this month at all
@@ -15707,11 +15715,11 @@ function renderLeave(){
     // Month earns accrual if: at or past anchor month, anniversary day has passed (or month fully elapsed), not partial start, not future
     const monthAccrues = (!isPartialStart && moDate >= mAnchorMonthStart && (elapsed || anniversaryUnlocked) && !isFuture) || isLastMonth;
     const dayAcc = monthAccrues ? mAccrual : 0;
-    cum += dayAcc;
-    cumLeave += congeInMonth;
+    _pr.cum += dayAcc;
+    _pr.cumLeave += congeInMonth;
 
-    // Balance = total accrued (carry-over + this year) minus total leave taken (carry-over + this year)
-    const balEnd = cum - cumLeave;
+    // Balance = accrued at this company minus leave taken at this company
+    const balEnd = _pr.cum - _pr.cumLeave;
 
     let status, statusCls;
     if (isPartialStart) {
@@ -15744,7 +15752,7 @@ function renderLeave(){
       <td>${i+1}</td><td><b>${m}</b></td>
       <td><span class="tag ${statusCls}" style="white-space:nowrap">${status}</span></td>
       <td class="amount-neu">${dayAcc}</td>
-      <td class="amount-neu">${cum.toFixed(1)}</td>
+      <td class="amount-neu">${_pr.cum.toFixed(1)}</td>
       <td class="${congeInMonth > 0 ? 'amount-neg' : 'amount-neu'}">${congeInMonth || 0}</td>
       <td class="${sickInMonth  > 0 ? 'amount-neg' : 'amount-neu'}">${sickInMonth  || 0}</td>
       <td class="${balEnd >= 0  ? 'amount-pos' : 'amount-neg'}">${balEnd.toFixed(1)}</td>
