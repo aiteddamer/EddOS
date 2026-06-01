@@ -15279,8 +15279,8 @@ function deleteAsset(id){ const _a=DB.assets.find(x=>x.id===id); _historyPush('D
 
 // ─── LEAVE ──────────────────────────────────────────────────────────────────
 // Leave is the SOURCE OF TRUTH. Bonus reads from here.
-function calcLeaveForMonth(monthStr) {
-  const pos = getActiveCareerPos();
+function calcLeaveForMonth(monthStr, posOverride) {
+  const pos = posOverride !== undefined ? posOverride : getActiveCareerPos();
   const weights = getPolicyWeights(pos);
   const entries = getAllLeaveEntries();
   return entries.reduce((total, entry) => {
@@ -15394,8 +15394,11 @@ function renderLeave(){
   const leaveYr = getLeaveYear();
   const today   = new Date();
 
-  // Always use the 12 months of leaveYr — independent of the global MONTHS / activeYear
-  const LEAVE_MONTHS = MO_NAMES.map(m => m + ' ' + leaveYr);
+  // When viewing 'all' years, show every year that has data; otherwise just leaveYr
+  const _leaveYears = activeYear === 'all'
+    ? [...new Set([...getAvailableYears(), leaveYr])].sort()
+    : [leaveYr];
+  const LEAVE_MONTHS = _leaveYears.flatMap(yr => MO_NAMES.map(m => m + ' ' + yr));
   // Returns the date of the FIRST accrual event:
   //   • Joined on the 1st → accrues that same month on the 1st
   //   • Joined mid-month (e.g. 13/03) → first accrual on 13/04 (same day, next month)
@@ -15572,17 +15575,18 @@ function renderLeave(){
 
   // Calendar dot strip
   const dotHtml = LEAVE_MONTHS.map((m, i) => {
-    const moDate    = new Date(leaveYr, i, 1);
-    const moEndDate = new Date(leaveYr, i + 1, 0);
-    const congeInMonth = calcLeaveForMonth(m);
+    const [_dn, _dyr] = m.split(' ');
+    const _di = MO_NAMES.indexOf(_dn);
+    const moDate    = new Date(+_dyr, _di, 1);
+    const moEndDate = new Date(+_dyr, _di + 1, 0);
     const monthPos = getPosForMonth(moDate, moEndDate);
+    const congeInMonth = calcLeaveForMonth(m, monthPos);
     const mAnchor  = monthPos ? _accrualAnchor(new Date(monthPos.start)) : null;
     const mEnd     = monthPos && monthPos.end ? new Date(monthPos.end) : null;
     const anchorMonthStart = mAnchor ? new Date(mAnchor.getFullYear(), mAnchor.getMonth(), 1) : null;
     const beforeAnchor = anchorMonthStart && moDate < anchorMonthStart;
     const afterJob = mEnd && moDate > mEnd;
     const elapsed  = mEnd ? mEnd >= moDate : moEndDate <= today;
-    const monthAccrues = !beforeAnchor && !afterJob && elapsed;
     const cls = !monthPos ? 'leave-dot-pending'
               : beforeAnchor || afterJob ? 'leave-dot-pending'
               : moDate > today ? 'leave-dot-pending'
@@ -15603,11 +15607,11 @@ function renderLeave(){
   // • Full month worked at anchor or later → ✅ Worked (earns accrual)
   // • Future month → ⏳ Pending
 
-  // Pre-seed cum + cumLeave with everything accrued/taken BEFORE the viewed year
+  // Pre-seed cum + cumLeave with everything accrued/taken BEFORE the first viewed year
   let cum = 0;
   let cumLeave = 0;
-  const viewYrStart = new Date(leaveYr, 0, 1);
-  // Walk from the earliest job start back to Jan 1 of the viewed year
+  const viewYrStart = new Date(_leaveYears[0], 0, 1);
+  // Walk from the earliest job start up to Jan 1 of the first viewed year
   const earliestStart = allPositions.length ? new Date(allPositions[0].start) : null;
   if (earliestStart) {
     let scanMo = new Date(earliestStart.getFullYear(), earliestStart.getMonth(), 1);
@@ -15652,13 +15656,17 @@ function renderLeave(){
   let lastPosId = '__init__'; // track job changes to reset cumulative (use sentinel to avoid wiping pre-seeded cum on first month)
 
   const rows = LEAVE_MONTHS.map((m, i) => {
-    const moDate    = new Date(leaveYr, i, 1);
-    const moEndDate = new Date(leaveYr, i + 1, 0);
-    const congeInMonth = calcLeaveForMonth(m);
-    const sickInMonth  = calcSickForMonth(m);
+    const [_mName, _mYrStr] = m.split(' ');
+    const _mYr = +_mYrStr;
+    const _mIdx = MO_NAMES.indexOf(_mName);
+    const moDate    = new Date(_mYr, _mIdx, 1);
+    const moEndDate = new Date(_mYr, _mIdx + 1, 0);
 
-    // Find which job covers this month
+    // Find which job covers this month (needed for correct weights below)
     const monthPos = getPosForMonth(moDate, moEndDate);
+
+    const congeInMonth = calcLeaveForMonth(m, monthPos);
+    const sickInMonth  = calcSickForMonth(m);
 
     // Only reset cumulative when genuinely switching between two different jobs mid-year.
     // The sentinel '__init__' prevents wiping the pre-seeded carry-over on the very first month.
@@ -15718,8 +15726,10 @@ function renderLeave(){
       status = `🔄 Partial · ${company}`; statusCls = 'tag-pending';
     }
 
-    // Sync back to bonusMonths
-    const bm = DB.bonusMonths.find(x => x.month === m);
+    // Sync back to bonusMonths — look in the right year bucket for multi-year view
+    const _bmYrData = (_mirror.years && _mirror.years[_mYr]) ? _mirror.years[_mYr] : null;
+    const _bmArr = _bmYrData ? _bmYrData.bonusMonths : DB.bonusMonths;
+    const bm = _bmArr && _bmArr.find(x => x.month === m);
     if (bm) {
       const effData = calcEffectiveDaysForMonth(m);
       if (effData) {
