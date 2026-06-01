@@ -15636,20 +15636,11 @@ function renderLeave(){
           const scanMonthAccrues = (scanMo >= scanAnchorMonthStart && (elapsed || scanAnniversaryUnlocked)) || scanIsLastMonth;
           if (scanMonthAccrues) _posCum[scanKey].cum += scanAccrual;
         }
-        // Accumulate leave for this position in this prior month
-        const priorYr = scanMo.getFullYear();
-        const priorMirror = (_mirror.years && _mirror.years[priorYr]) ? _mirror.years[priorYr] : null;
-        const priorLeaveArr = priorMirror ? (priorMirror.leaveEntries || []) : [];
-        priorLeaveArr.forEach(e => {
-          if (e.type === 'Sick Day') return;
-          const refDate = e.startDate ? new Date(e.startDate)
-            : e.month ? new Date(e.month.split(' ')[1], MO_NAMES.indexOf(e.month.split(' ')[0]), 1) : null;
-          if (refDate && refDate.getFullYear() === priorYr && refDate.getMonth() === scanMo.getMonth()) {
-            _posCum[scanKey].cumLeave += e.startDate
-              ? calcLeaveCostWeighted(e.startDate, e.endDate||e.startDate, getPolicyWeights(scanPos))
-              : (e.days ? +e.days : 0);
-          }
-        });
+        // Accumulate leave for this position in this prior month — use getAllLeaveEntries()
+        // so entries are found regardless of which year bucket they were saved in.
+        const _scanMoStr = MO_NAMES[scanMo.getMonth()] + ' ' + scanMo.getFullYear();
+        const _scanLeave = calcLeaveForMonth(_scanMoStr, scanPos);
+        _posCum[scanKey].cumLeave += _scanLeave;
       }
       scanMo = new Date(scanMo.getFullYear(), scanMo.getMonth() + 1, 1);
     }
