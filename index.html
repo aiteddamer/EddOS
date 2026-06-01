@@ -12874,9 +12874,13 @@ function renderDashboard(){
       const s = d.income===0&&d.expenses===0?'— No Data':d.net<0?'⚠️ Deficit':'✅ Surplus';
       const sc = s.includes('Surplus')?'tag-surplus':s.includes('Deficit')?'tag-deficit':'tag-nodata';
       const icon = s.includes('Surplus')?'✅':s.includes('Deficit')?'⚠️':'—';
-      const sr2 = d.income>0?d.net/d.income:0;
+      const [_mn, _myr] = m.split(' ');
+      const _rowYd = (_mirror && _mirror.years && _mirror.years[+_myr]) ? _mirror.years[+_myr] : null;
+      const _rowYs = (_rowYd && _rowYd.savingsSettings) ? _rowYd.savingsSettings : {};
+      const _savingsTarget = _rowYs.savingsTarget !== undefined ? +_rowYs.savingsTarget : (+DB.settings.savingsTarget || 0);
+      const sr2 = _savingsTarget > 0 ? d.net / _savingsTarget : (d.income > 0 ? d.net / d.income : 0);
       const barW = Math.max(0,Math.min(100,sr2*100));
-      const barColor = sr2>=0.3?'var(--surplus)':sr2>=0?'var(--warn)':'var(--deficit)';
+      const barColor = sr2>=1?'var(--surplus)':sr2>=0.5?'var(--warn)':sr2>=0?'var(--accent)':'var(--deficit)';
       const isNow = m===curMonthNow;
       const isView = m===viewMonthKey && !isNow;
       const rowStyle = isNow ? 'background:rgba(var(--accent-rgb),0.05)' : isView ? 'background:rgba(var(--accent2-rgb),0.05)' : '';
@@ -12885,7 +12889,7 @@ function renderDashboard(){
         <td class="amount-pos">${fmt(d.income)}</td>
         <td class="amount-neg">${fmt(d.expenses)}</td>
         <td class="${d.net>=0?'amount-pos':'amount-neg'}">${fmt(d.net)}</td>
-        <td style="min-width:90px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barColor};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;min-width:34px">${d.income>0?pct(sr2):'—'}</span></div></td>
+        <td style="min-width:90px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barColor};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;min-width:34px">${(_savingsTarget>0||d.income>0)?pct(sr2):'—'}</span></div></td>
         <td><span class="tag ${sc}">${icon} ${s.replace('— ','')}</span></td>
       </tr>`;
     }).join('');
