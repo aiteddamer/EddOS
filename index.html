@@ -2215,12 +2215,10 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
 
   // ── Load user data from Firestore ──
   window._fbLoadUserData = async (uid) => {
-    // NOTE: Do NOT catch here — let errors propagate so the retry loop in
-    // _onFirebaseUser can distinguish a real read failure from "no document".
-    // Swallowing the error and returning null caused existing users to be
-    // treated as brand-new (fsData===null → onboarding shown on every failed read).
-    const snap = await getDoc(doc(db, 'users', uid));
-    return snap.exists() ? snap.data() : null;
+    try {
+      const snap = await getDoc(doc(db, 'users', uid));
+      return snap.exists() ? snap.data() : null;
+    } catch(e) { console.warn('Firestore read error', e); return null; }
   };
 
   // ── Save user data to Firestore ──
