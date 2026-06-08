@@ -18764,19 +18764,13 @@ window._onFirebaseUser = async function(user) {
   }
 
   // ── Cloud data loaded — apply it. Cloud is always the source of truth. ──
-  // Consider the user "existing" if Firestore has ANY real _mirror data —
-  // not just when userName is set. Users who clicked "Configure Later" may have
-  // an empty userName but still have transactions, settings, or a _seeded flag.
-  const _hasCloudData = fsData && fsData._mirror && (
-    fsData._mirror.userName ||
-    fsData._seeded ||
-    (fsData._mirror.years && Object.keys(fsData._mirror.years).length > 0) ||
-    (fsData._mirror.config && (
-      (fsData._mirror.config.incomeSources && fsData._mirror.config.incomeSources.length > 0) ||
-      (fsData._mirror.config.subscriptions && fsData._mirror.config.subscriptions.length > 0)
-    ))
-  );
-  if (_hasCloudData) {
+  // If fsData is non-null the Firestore document exists → user is registered.
+  // Never show onboarding to a user whose document already exists, regardless
+  // of whether userName or any other field is populated (covers "Configure Later"
+  // users who saved a blank/minimal document on first sign-up).
+  if (fsData !== null) {
+    // Ensure _mirror exists (guard against malformed Firestore docs)
+    if (!fsData._mirror) fsData._mirror = {};
     // Backfill userName from Google account if it was never saved
     if (!fsData._mirror.userName && user) {
       fsData._mirror.userName = user.displayName || user.email || 'User';
