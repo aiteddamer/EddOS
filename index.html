@@ -18421,12 +18421,17 @@ function cpFinish(withPin){
   MONTHS = MO_NAMES.map(m => m + ' ' + activeYear);
   currentPage = 'dashboard';
 
-  activeProfileName=cpName;
-  activeProfileEmoji=cpEmoji;
-  activeProfilePin=withPin?cpPinPending:null;
-  _mirror.userName=activeProfileName;
-  _mirror.userEmoji=activeProfileEmoji;
-  _mirror.userPin=activeProfilePin;
+  // If user skipped Step 1 (Configure Later), cpName may be empty — fall back to
+  // Google display name so _mirror.userName is never blank (empty userName causes
+  // the onboarding to re-appear on every subsequent login).
+  activeProfileName = cpName ||
+    (window._fbPendingUser && (window._fbPendingUser.displayName || window._fbPendingUser.email)) ||
+    activeProfileName || 'User';
+  activeProfileEmoji = cpEmoji;
+  activeProfilePin = withPin ? cpPinPending : null;
+  _mirror.userName = activeProfileName;
+  _mirror.userEmoji = activeProfileEmoji;
+  _mirror.userPin = activeProfilePin;
   // Show onboarding step
   const s2=document.getElementById('cpStep2'), s3=document.getElementById('cpStep3');
   if(s2) s2.style.display='none';
@@ -18648,6 +18653,9 @@ function cpFinishOnboarding(){
     // Register session after onboarding completes
     if (window._fbRegisterSession) window._fbRegisterSession(fbUser.uid).catch(()=>{});
     if (window._fbStartSessionPoll) window._fbStartSessionPoll(fbUser.uid);
+    // Mark current month as seen NOW (post-onboarding) so future visits in the
+    // same month still trigger the rollover sync if the user skipped setup.
+    if (typeof _nmRolloverMarkSeen === 'function') _nmRolloverMarkSeen();
     toast('Welcome, ' + activeProfileName + ' ✓');
   } else {
     enterApp();
@@ -18756,7 +18764,23 @@ window._onFirebaseUser = async function(user) {
   }
 
   // ── Cloud data loaded — apply it. Cloud is always the source of truth. ──
-  if (fsData && fsData._mirror && fsData._mirror.userName) {
+  // Consider the user "existing" if Firestore has ANY real _mirror data —
+  // not just when userName is set. Users who clicked "Configure Later" may have
+  // an empty userName but still have transactions, settings, or a _seeded flag.
+  const _hasCloudData = fsData && fsData._mirror && (
+    fsData._mirror.userName ||
+    fsData._seeded ||
+    (fsData._mirror.years && Object.keys(fsData._mirror.years).length > 0) ||
+    (fsData._mirror.config && (
+      (fsData._mirror.config.incomeSources && fsData._mirror.config.incomeSources.length > 0) ||
+      (fsData._mirror.config.subscriptions && fsData._mirror.config.subscriptions.length > 0)
+    ))
+  );
+  if (_hasCloudData) {
+    // Backfill userName from Google account if it was never saved
+    if (!fsData._mirror.userName && user) {
+      fsData._mirror.userName = user.displayName || user.email || 'User';
+    }
     if (msg) msg.textContent = 'Loading your data…';
     try {
       // Cloud always wins. If local had newer unsaved changes, push them up first.
@@ -18852,6 +18876,8 @@ window._onFirebaseUser = async function(user) {
   updatePerfIndicator();
   // Add Google account info to sidebar bottom
   _renderFirebaseSidebarBadge(user);
+  // Mark current month as seen so the rollover runs correctly on future visits
+  if (typeof _nmRolloverMarkSeen === 'function') _nmRolloverMarkSeen();
   toast('Welcome, ' + activeProfileName + ' ✓');
 
   } catch(e) {
@@ -20724,6 +20750,19 @@ initApp();
 // Runs after initApp. Detects if it's a new month since the last visit,
 // triggers a full re-sync of salary + subscriptions + recurring templates,
 // and shows a welcome banner listing what was auto-added.
+// NOTE: _NM_KEY is intentionally NOT written here at IIFE time — it is written
+// inside _nmRolloverMarkSeen() which is called only after the user has fully
+// entered the app (post-onboarding). This prevents the "last 5 days" bug where
+// the key was stamped during the onboarding session, causing the rollover to be
+// skipped on every subsequent visit within the same month.
+window._nmRolloverMarkSeen = function() {
+  try {
+    const _NM_KEY = (typeof LS_KEY !== 'undefined' ? LS_KEY : 'eddos') + '__lastSeenMonth';
+    const _now = new Date();
+    const _curMonthKey = (typeof MO_NAMES !== 'undefined' ? MO_NAMES[_now.getMonth()] : _now.toLocaleString('en',{month:'long'})) + ' ' + _now.getFullYear();
+    localStorage.setItem(_NM_KEY, _curMonthKey);
+  } catch(e) {}
+};
 (function _newMonthRollover() {
   const _NM_KEY = LS_KEY + '__lastSeenMonth';
   const _now = new Date();
@@ -20731,11 +20770,16 @@ initApp();
   let _lastSeen = '';
   try { _lastSeen = localStorage.getItem(_NM_KEY) || ''; } catch(e) {}
 
-  // Always update the stored month
-  try { localStorage.setItem(_NM_KEY, _curMonthKey); } catch(e) {}
+  // Do NOT write _NM_KEY here — it is written by _nmRolloverMarkSeen() after app entry.
 
-  // Only trigger the full rollover if it's genuinely a new month
-  if (_lastSeen && _lastSeen !== _curMonthKey) {
+  // Trigger rollover if:
+  // (a) genuinely a new calendar month since last visit, OR
+  // (b) first real visit after onboarding (_lastSeen is blank) AND user already has income sources/data
+  const hasData = (DB.incomeSources && DB.incomeSources.length > 0) ||
+                  (DB.transactions && DB.transactions.length > 0);
+  const shouldRollover = (_lastSeen && _lastSeen !== _curMonthKey) ||
+                         (!_lastSeen && hasData);
+  if (shouldRollover) {
     // Small delay so the page is fully rendered first
     setTimeout(() => {
       try {
