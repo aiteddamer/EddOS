@@ -11641,8 +11641,8 @@ const DEFAULTS = {
 // All data lives in FILE_DATA — injected at save time or starts empty.
 // To persist: use "Export File" which downloads a new HTML with data embedded.
 
-const YEAR_KEYS = ['transactions','bonusEntries','bonusMonths','bonusTypes','leaveEntries','goals','assets','loans','learning','habits','habitLog','monthBudgets','deletedIncomeIds','savingsSettings','incomeEntries','wishlist'];
-const CONFIG_KEYS = ['incomeSources','friends','settings','careerPositions','careerEvolutions','subscriptions','recurringTemplates'];
+const YEAR_KEYS = ['transactions','bonusEntries','bonusMonths','bonusTypes','leaveEntries','goals','assets','loans','learning','habits','habitLog','monthBudgets','deletedIncomeIds','savingsSettings','incomeEntries'];
+const CONFIG_KEYS = ['incomeSources','friends','settings','careerPositions','careerEvolutions','subscriptions','recurringTemplates','wishlist'];
 
 // FILE_DATA is injected by export — empty on fresh file
 // Format: { userName, userEmoji, userPin, years: { "2026": {...yearKeys} }, config: {...configKeys} }
@@ -11750,6 +11750,21 @@ function loadDB() {
     });
     _mirror.config.recurringTemplates = _cfgTpls;
     if (_migrated > 0) try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
+  }
+  // ── One-time migration: collect wishlist items from per-year buckets into config ──
+  // (Fixes wishlist items saved before wishlist was moved from YEAR_KEYS to CONFIG_KEYS)
+  if (_mirror.years && _mirror.config !== undefined) {
+    const _cfgWl    = _mirror.config.wishlist || [];
+    const _cfgWlIds = new Set(_cfgWl.map(w => w.id));
+    let _wlMigrated = 0;
+    Object.values(_mirror.years).forEach(yd => {
+      (yd.wishlist || []).forEach(w => {
+        if (!_cfgWlIds.has(w.id)) { _cfgWl.push(w); _cfgWlIds.add(w.id); _wlMigrated++; }
+      });
+      delete yd.wishlist; // clean up stale per-year copy
+    });
+    _mirror.config.wishlist = _cfgWl;
+    if (_wlMigrated > 0) try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
   }
   const yr = (activeYear === 'all') ? new Date().getFullYear() : +activeYear;
   // Always read from _mirror (which is kept in sync with localStorage)
