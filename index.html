@@ -189,6 +189,56 @@ body::before{
 #main::-webkit-scrollbar-track{background:var(--bg)}
 #main::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
+
+/* ── Cloud sync indicator pill (topbar) ── */
+#_cloudSyncPill {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-family: 'DM Mono', monospace;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+  border: 1px solid transparent;
+  cursor: default;
+  user-select: none;
+  flex-shrink: 0;
+}
+#_cloudSyncPill.syncing {
+  background: rgba(var(--accent-rgb), 0.10);
+  border-color: rgba(var(--accent-rgb), 0.30);
+  color: var(--accent);
+}
+#_cloudSyncPill.synced {
+  background: rgba(52,199,89, 0.10);
+  border-color: rgba(52,199,89, 0.30);
+  color: var(--surplus);
+}
+#_cloudSyncPill.error {
+  background: rgba(255,59,48, 0.10);
+  border-color: rgba(255,59,48, 0.35);
+  color: var(--danger);
+}
+#_cloudSyncPill .sync-spinner {
+  display: inline-block;
+  width: 9px; height: 9px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: _spinCloud 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes _spinCloud {
+  to { transform: rotate(360deg); }
+}
+@media (max-width: 600px) {
+  #_cloudSyncPill { display: none !important; }
+}
+
 .topbar{
   padding:16px 28px;display:flex;align-items:center;justify-content:space-between;
   border-bottom:1px solid var(--border);position:sticky;top:0;
@@ -2296,6 +2346,7 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
         const av = document.getElementById('sidebarProfileAvatar'); if(av) av.textContent = activeProfileEmoji;
         const nm = document.getElementById('sidebarProfileName'); if(nm) nm.textContent = activeProfileName;
         if (typeof toast === 'function') toast('\u2705 Synced from cloud \u2713');
+        _setSyncPill('synced', 'Synced ✓');
       } else {
         if (typeof toast === 'function') toast('\u26a0\ufe0f No cloud data found');
       }
@@ -2890,6 +2941,7 @@ window._fbHandleEmailSubmit = function() {
       </div>
     </div>
     <div class="topbar-right">
+      <div id="_cloudSyncPill" title="Cloud sync status"></div>
       <div class="live-clock" id="liveClock">12:43:24</div>
       <div class="perf-indicator"><div class="perf-dot"></div><span id="monthPerfLabel" style="color: var(--surplus);">All Years: +13,962 MAD</span></div>
       <div class="theme-switcher">
@@ -18792,24 +18844,12 @@ window._onFirebaseUser = async function(user) {
     }
     if (msg) msg.textContent = 'Loading your data…';
     try {
-      // Cloud always wins. If local had newer unsaved changes, push them up first.
+      // Cloud is always the source of truth — local data is never uploaded on login.
       const cloudTs = fsData._lastSync || fsData._mirror._lastSync || 0;
-      const localTs = _mirror._lastSync || 0;
-      if (localTs > cloudTs) {
-        // Local is newer (unsaved changes survived via beforeunload) — upload then use local
-        if (msg) msg.textContent = 'Uploading local changes…';
-        console.info('[EddOS] Local data is newer — uploading to Firestore before entering app');
-        _mirror._lastSync = localTs;
-        if (window._fbSaveUserData) {
-          await window._fbSaveUserData(user.uid, { _mirror, _lastSync: localTs });
-        }
-        // Now re-fetch so _mirror reflects the confirmed cloud state
-        try { fsData = await window._fbLoadUserData(user.uid); } catch(e) {}
-      }
-      // Apply cloud data
+      // Apply cloud data unconditionally
       if (msg) msg.textContent = 'Syncing from cloud…';
       Object.assign(_mirror, (fsData && fsData._mirror) ? fsData._mirror : _mirror);
-      _mirror._lastSync = Math.max(cloudTs, localTs);
+      _mirror._lastSync = cloudTs;
       // Re-derive activeProfile
       activeProfileName  = _mirror.userName  || user.displayName || user.email || 'User';
       activeProfileEmoji = _mirror.userEmoji || '👤';
@@ -18908,10 +18948,21 @@ window._onFirebaseUser = async function(user) {
 // ── Patch saveDB to also sync to Firestore ────────────────────────────────
 let _fbSaveTimer = null;
 function _patchSaveDBForFirebase(uid) {
-  const _origSaveDB = window.saveDB;
-  if (!_origSaveDB || window._fbSavePatched) return;
+  if (window._fbSavePatched) return;
   window._fbSavePatched = true;
-  // Override the debounced save
+  // Wrap saveDB itself so every save path — debounced or direct — triggers a cloud sync
+  const _origSaveDB = window.saveDB;
+  if (_origSaveDB) {
+    window.saveDB = function() {
+      _origSaveDB.apply(this, arguments);
+      _debouncedFirestoreSync(uid);
+    };
+    // Also keep the global reference used by other code in sync
+    if (typeof saveDB !== 'undefined') {
+      try { saveDB = window.saveDB; } catch(e) {}
+    }
+  }
+  // Also wrap _debouncedSave as a secondary safety net
   const _origDebouncedSave = window._debouncedSave;
   if (_origDebouncedSave) {
     window._debouncedSave = function() {
@@ -18921,14 +18972,45 @@ function _patchSaveDBForFirebase(uid) {
   }
 }
 
+// ── Cloud sync pill helpers ──
+function _setSyncPill(state, label) {
+  const pill = document.getElementById('_cloudSyncPill');
+  if (!pill) return;
+  pill.className = state;
+  pill.style.display = 'flex';
+  if (state === 'syncing') {
+    pill.innerHTML = '<span class="sync-spinner"></span>' + label;
+  } else {
+    const icon = state === 'synced' ? '✓' : '✕';
+    pill.innerHTML = '<span style="font-size:11px;line-height:1">' + icon + '</span>' + label;
+    // Auto-fade "Synced" after 4s
+    if (state === 'synced') {
+      clearTimeout(pill._fadeTimer);
+      pill._fadeTimer = setTimeout(() => { pill.style.display = 'none'; }, 4000);
+    }
+  }
+}
+
 function _debouncedFirestoreSync(uid) {
   clearTimeout(_fbSaveTimer);
+  // Show "pending" state immediately so user knows a sync is queued
+  _setSyncPill('syncing', 'Saving…');
+  // 500ms debounce — fast enough that any refresh after a save will see the new data
   _fbSaveTimer = setTimeout(async () => {
     if (!window._fbSaveUserData || !uid) return;
+    _setSyncPill('syncing', 'Syncing…');
     try {
-      await window._fbSaveUserData(uid, { _mirror, _lastSync: Date.now() });
-    } catch(e) { console.warn('Firestore sync error', e); }
-  }, 3000);
+      _mirror._lastSync = Date.now();
+      await window._fbSaveUserData(uid, { _mirror, _lastSync: _mirror._lastSync });
+      const t = new Date(_mirror._lastSync);
+      const hh = String(t.getHours()).padStart(2,'0');
+      const mm = String(t.getMinutes()).padStart(2,'0');
+      _setSyncPill('synced', 'Synced ' + hh + ':' + mm);
+    } catch(e) {
+      console.warn('Firestore sync error', e);
+      _setSyncPill('error', 'Sync failed');
+    }
+  }, 500);
 }
 
 // Also hook saveDB directly for immediate-save paths
@@ -18936,13 +19018,9 @@ const _origSaveDB_fb = typeof saveDB !== 'undefined' ? saveDB : null;
 function _fbHookSaveDB() {
   if (!window._fbCurrentUser || window._fbSaveHooked) return;
   window._fbSaveHooked = true;
-  // Debounced 3s sync after every save
   const uid = window._fbCurrentUser.uid;
-  setInterval(() => {
-    if (window._fbCurrentUser && window._fbSaveUserData) {
-      window._fbSaveUserData(uid, { _mirror, _lastSync: Date.now() }).catch(()=>{});
-    }
-  }, 30000); // also sync every 30s as fallback
+  // Patch saveDB so every save triggers a near-instant Firestore sync
+  _patchSaveDBForFirebase(uid);
 }
 
 // ── Render signed-in user badge in sidebar ────────────────────────────────
