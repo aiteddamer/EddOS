@@ -21279,14 +21279,16 @@ function renderYearCompare() {
   const yearData = years.map(y => {
     const yTx = allTx.filter(t => new Date(t.date).getFullYear() === y);
     const income = yTx.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    // 💰 Savings transactions are transfers, not spending — exclude from "expenses",
-    // track separately, but still subtract from net (leftover in main account).
+    // 💰 Savings transactions are transfers, not spending — exclude from "expenses" and
+    // track separately. "Net Saved" = everything NOT spent (leftover cash + money you
+    // deliberately moved into savings) — both are still yours, so both count as saved.
     const expenses = yTx.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
     const savings = yTx.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
-    const net = income - expenses - savings;
+    const leftover = income - expenses - savings;
+    const net = income - expenses; // = savings + leftover
     const sr = income > 0 ? net/income : 0;
     const bonusTx = yTx.filter(t=>t.type==='💰 Income'&&t.category==='🎯 Bonus').reduce((a,t)=>a+(+t.amount||0),0);
-    return { year:y, income, expenses, savings, net, sr, bonusTx, txCount:yTx.length };
+    return { year:y, income, expenses, savings, leftover, net, sr, bonusTx, txCount:yTx.length };
   });
   const cur = yearData.find(d=>d.year===activeYear) || yearData[yearData.length-1];
   const prev = yearData.find(d=>d.year===activeYear-1) || yearData[yearData.length-2] || {income:0,expenses:0,net:0,sr:0};
@@ -21296,7 +21298,7 @@ function renderYearCompare() {
   document.getElementById('ycKpis').innerHTML = [
     {label:`${activeYear} Income`,val:fmtC(cur.income),sub:`vs ${activeYear-1}: ${deltaIncome>=0?'+':''}${(deltaIncome*100).toFixed(1)}%`,icon:'💰',color:'var(--surplus)',delta:deltaIncome},
     {label:`${activeYear} Expenses`,val:fmtC(cur.expenses),sub:`vs ${activeYear-1}: ${deltaExp>=0?'+':''}${(deltaExp*100).toFixed(1)}%`,icon:'💸',color:'var(--deficit)',delta:-deltaExp},
-    {label:`${activeYear} Net Saved`,val:fmtC(cur.net),sub:`vs ${activeYear-1}: ${deltaNet>=0?'+':''}${(deltaNet*100).toFixed(1)}%`,icon:'📈',color:cur.net>=0?'var(--accent)':'var(--deficit)',delta:deltaNet},
+    {label:`${activeYear} Net Saved`,val:fmtC(cur.net),sub:`Saved: ${fmtC(cur.savings)} + Leftover: ${fmtC(cur.leftover)}`,icon:'📈',color:cur.net>=0?'var(--accent)':'var(--deficit)',delta:deltaNet},
     {label:`${activeYear} Savings %`,val:pct(cur.sr),sub:`${activeYear-1}: ${pct(prev.sr)}`,icon:'📊',color:'var(--accent2)',delta:cur.sr-prev.sr},
   ].map(k=>`<div class="kpi-tile" style="--tile-color:${k.color}">
     <div class="kpi-label">${k.label}</div>
@@ -21326,6 +21328,7 @@ function renderYearCompare() {
       <td><b>${d.year}</b></td>
       <td class="amount-pos">${fmt(d.income)}</td>
       <td class="amount-neg">${fmt(d.expenses)}</td>
+      <td style="color:var(--accent3)">${fmt(d.savings)}</td>
       <td class="${d.net>=0?'amount-pos':'amount-neg'}">${fmt(d.net)}</td>
       <td>${pct(d.sr)}</td>
       <td class="amount-pos">${fmt(d.bonusTx)}</td>
@@ -21333,7 +21336,7 @@ function renderYearCompare() {
       <td>${di!==null?`<span style="color:${di>=0?'var(--surplus)':'var(--deficit)'}">${di>=0?'▲':'▼'} ${Math.abs(di*100).toFixed(1)}%</span>`:'—'}</td>
     </tr>`;
   }).join('');
-  document.getElementById('ycTable').innerHTML = `<thead><tr><th>Year</th><th>Total Income</th><th>Total Expenses</th><th>Net Saved</th><th>Savings %</th><th>Bonuses</th><th>Transactions</th><th>Income Δ</th></tr></thead><tbody>${rows}</tbody>`;
+  document.getElementById('ycTable').innerHTML = `<thead><tr><th>Year</th><th>Total Income</th><th>Total Expenses</th><th>Saved</th><th>Net Saved</th><th>Savings %</th><th>Bonuses</th><th>Transactions</th><th>Income Δ</th></tr></thead><tbody>${rows}</tbody>`;
 }
 
 // ─── SALARY SIMULATOR ────────────────────────────────────────────────────────
