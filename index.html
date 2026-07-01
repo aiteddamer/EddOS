@@ -11818,33 +11818,46 @@ let activeProfileId = 'local';
 function loadDB() {
   // ── One-time migration: collect recurringTemplates from per-year buckets into config ──
   // (Fixes templates saved before recurringTemplates was moved to CONFIG_KEYS)
-  if (_mirror.years && _mirror.config !== undefined) {
+  // Gated by _mirror._recurringTplsMigrated so this runs exactly ONCE, ever — otherwise
+  // stale duplicates left in old per-year buckets would resurrect templates the user
+  // already deleted from config, every time loadDB() re-ran (which is very often).
+  if (_mirror.years && _mirror.config !== undefined && !_mirror._recurringTplsMigrated) {
     const _cfgTpls = _mirror.config.recurringTemplates || [];
     const _cfgIds  = new Set(_cfgTpls.map(t => t.id));
-    let _migrated  = 0;
+    let _touched = false;
     Object.values(_mirror.years).forEach(yd => {
-      (yd.recurringTemplates || []).forEach(t => {
-        if (!_cfgIds.has(t.id)) { _cfgTpls.push(t); _cfgIds.add(t.id); _migrated++; }
-      });
-      delete yd.recurringTemplates; // clean up stale per-year copy
+      if (yd.recurringTemplates) {
+        _touched = true;
+        yd.recurringTemplates.forEach(t => {
+          if (!_cfgIds.has(t.id)) { _cfgTpls.push(t); _cfgIds.add(t.id); }
+        });
+        delete yd.recurringTemplates; // clean up stale per-year copy
+      }
     });
     _mirror.config.recurringTemplates = _cfgTpls;
-    if (_migrated > 0) try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
+    _mirror._recurringTplsMigrated = true;
+    if (_touched) try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
   }
   // ── One-time migration: collect wishlist items from per-year buckets into config ──
   // (Fixes wishlist items saved before wishlist was moved from YEAR_KEYS to CONFIG_KEYS)
-  if (_mirror.years && _mirror.config !== undefined) {
+  // Same run-once guard as above — without it, a deleted wishlist item whose stale
+  // duplicate still lived in a per-year bucket would keep coming back after every reload.
+  if (_mirror.years && _mirror.config !== undefined && !_mirror._wishlistMigrated) {
     const _cfgWl    = _mirror.config.wishlist || [];
     const _cfgWlIds = new Set(_cfgWl.map(w => w.id));
-    let _wlMigrated = 0;
+    let _wlTouched = false;
     Object.values(_mirror.years).forEach(yd => {
-      (yd.wishlist || []).forEach(w => {
-        if (!_cfgWlIds.has(w.id)) { _cfgWl.push(w); _cfgWlIds.add(w.id); _wlMigrated++; }
-      });
-      delete yd.wishlist; // clean up stale per-year copy
+      if (yd.wishlist) {
+        _wlTouched = true;
+        yd.wishlist.forEach(w => {
+          if (!_cfgWlIds.has(w.id)) { _cfgWl.push(w); _cfgWlIds.add(w.id); }
+        });
+        delete yd.wishlist; // clean up stale per-year copy
+      }
     });
     _mirror.config.wishlist = _cfgWl;
-    if (_wlMigrated > 0) try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
+    _mirror._wishlistMigrated = true;
+    if (_wlTouched) try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
   }
   const yr = (activeYear === 'all') ? new Date().getFullYear() : +activeYear;
   // Always read from _mirror (which is kept in sync with localStorage)
