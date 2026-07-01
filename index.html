@@ -12703,6 +12703,22 @@ function leaveBalance(){
   return totalAccrued - totalTaken;
 }
 function activeGoals(){ return DB.goals.filter(g=>g.status==='🔄 In Progress').length; }
+// ── All-time cumulative cash savings (income − expenses, across every year ever tracked) ──
+// Money moved into the "💰 Savings" category is NOT subtracted — it's still yours (just parked),
+// so it naturally counts toward net worth as cash-on-hand. This lets Net Worth auto-grow with
+// whatever the user has actually saved, without needing a manual "asset" entry for it.
+function getAllTimeCumulativeSavings(){
+  const allYears = getAvailableYears();
+  let cum = 0;
+  allYears.forEach(yr => {
+    const yd = (_mirror.years && _mirror.years[yr]) ? _mirror.years[yr] : {};
+    const txs = yd.transactions || [];
+    const yInc = txs.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
+    const yExp = txs.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
+    cum += yInc - yExp;
+  });
+  return cum;
+}
 function totalDebt(){
   return DB.loans.reduce((a,l)=>{
     const r = (+l.rate||0)/100/12;
@@ -12775,7 +12791,8 @@ function renderDashboard(){
   const ag = activeGoals();
   const as = activeSubs();
   const totalAssets = DB.assets.reduce((a,x) => a + (+x.value||0), 0);
-  const nw = totalAssets - td;
+  const cumSaved = getAllTimeCumulativeSavings();
+  const nw = totalAssets + cumSaved - td;
 
   // For "all years" mode, compute per-year breakdown for avg/month
   let allYearsSummary = [];
@@ -12813,7 +12830,7 @@ function renderDashboard(){
       { label:'Leave Balance',       val:lb.toFixed(1)+' days',   sub:`since ${getActiveCareerPos()?.start?.slice(0,7) || 'job start'}`,                                                  icon:'🌴', color:lb>=5?'var(--accent2)':lb>=0?'var(--warn)':'var(--deficit)' },
       { label:'Active Goals',        val:ag,                      sub:`${DB.goals.filter(g=>g.status==='✅ Achieved').length} achieved`,                     icon:'🎯', color:'var(--accent3)' },
       { label:'Active Subs',         val:as,                      sub:`${fmtMAD(trueActiveSubs().filter(s=>s.tier!=='free').reduce((a,s)=>a+(+s.amount||0),0))} MAD/mo`, icon:'🔄', color:'var(--accent2)' },
-      { label:'Net Worth',           val:fmtC(nw),                sub:`Assets: ${fmtC(totalAssets)} · Debt: ${fmtC(td)}`,                                   icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
+      { label:'Net Worth',           val:fmtC(nw),                sub:`Assets: ${fmtC(totalAssets)} · Saved: ${fmtC(cumSaved)} · Debt: ${fmtC(td)}`,        icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
     ];
   } else {
     kpis = [
@@ -12827,7 +12844,7 @@ function renderDashboard(){
       { label:`Leave Balance`,     val:lb.toFixed(1)+' days', sub:`since ${getActiveCareerPos()?.start?.slice(0,7) || 'job start'}`,                     icon:'🌴', color:lb>=5?'var(--accent2)':lb>=0?'var(--warn)':'var(--deficit)' },
       { label:'Active Goals',      val:ag,             sub:`${DB.goals.filter(g=>g.status==='✅ Achieved').length} achieved`,icon:'🎯', color:'var(--accent3)' },
       { label:'Active Subs',       val:as,             sub:`${fmtMAD(trueActiveSubs().filter(s=>s.tier!=='free').reduce((a,s)=>a+(+s.amount||0),0))} MAD/mo`, icon:'🔄', color:'var(--accent2)' },
-      { label:'Net Worth',         val:fmtC(nw),       sub:`Assets: ${fmtC(totalAssets)} · Debt: ${fmtC(td)}`,              icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
+      { label:'Net Worth',         val:fmtC(nw),       sub:`Assets: ${fmtC(totalAssets)} · Saved: ${fmtC(cumSaved)} · Debt: ${fmtC(td)}`,   icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
     ];
   }
 
@@ -15364,7 +15381,8 @@ let nwChartInst;
 function renderNetWorth(){
   const assets = DB.assets.reduce((a,x)=>a+(+x.value||0),0);
   const liabilities = totalDebt();
-  const nw = assets - liabilities;
+  const cumSaved = getAllTimeCumulativeSavings(); // all-time savings, auto-folded into net worth
+  const nw = assets + cumSaved - liabilities;
   const opening = 0;
   const yr = activeYear === 'all' ? null : +activeYear;
   const yearLabel = yr ? String(yr) : 'All Years';
@@ -15392,8 +15410,9 @@ function renderNetWorth(){
 
   document.getElementById('nwKpis').innerHTML = [
     {label:'Total Assets',val:fmt(assets)+' MAD',color:'var(--surplus)',sub:'All tracked assets'},
+    {label:'Cash Savings',val:fmt(cumSaved)+' MAD',color:cumSaved>=0?'var(--accent3)':'var(--deficit)',sub:'All-time saved, auto-added ✓'},
     {label:'Total Liabilities',val:fmt(liabilities)+' MAD',color:'var(--deficit)',sub:`${DB.loans.filter(l=>l.name).length} active loans`},
-    {label:'Net Worth',val:fmt(nw)+' MAD',color:nw>=0?'var(--accent)':'var(--deficit)',sub:nw>=0?'Positive balance':'Negative balance'},
+    {label:'Net Worth',val:fmt(nw)+' MAD',color:nw>=0?'var(--accent)':'var(--deficit)',sub:`Assets + Savings − Debt`},
     {label:`${yearLabel} Saved`,val:fmt(ytdSaved)+' MAD',color:ytdSaved>=0?'var(--accent2)':'var(--deficit)',sub:activeYear==='all'?`Opening: ${fmt(opening)} · Cumulative: ${fmt(opening+ytdSaved)}`:`Opening: ${fmt(opening)} MAD`},
   ].map(k=>`<div class="nw-tile">
     <div class="nw-label">${k.label}</div>
@@ -15404,7 +15423,7 @@ function renderNetWorth(){
   if(nwChartInst) nwChartInst.destroy();
   nwChartInst = new Chart(document.getElementById('nwChart'),{
     type:'bar',
-    data:{labels:['Assets','Liabilities','Net Worth'],datasets:[{data:[assets,liabilities,Math.max(0,nw)],backgroundColor:[cSurplus(0.7),cDeficit(0.7),nw>=0?cAccent(0.7):cDeficit(0.7)],borderRadius:6}]},
+    data:{labels:['Assets','Cash Savings','Liabilities','Net Worth'],datasets:[{data:[assets,cumSaved,liabilities,Math.max(0,nw)],backgroundColor:[cSurplus(0.7),cAccent3(0.7),cDeficit(0.7),nw>=0?cAccent(0.7):cDeficit(0.7)],borderRadius:6}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:chartTextColor()}},y:{ticks:{color:chartTextColor(),callback:v=>(v/1000)+'k'},grid:{color:chartGridColor()}}}}
   });
 
