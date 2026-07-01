@@ -17810,13 +17810,15 @@ function renderIslamicHolidayForm() {
   const yr = getLeaveYear();
   if (_iholYear !== yr) {
     _iholYear = yr;
-    // default to first month that has a holiday, or current month
-    const stored = (DB.settings && DB.settings.islamicHolidays && DB.settings.islamicHolidays[yr]) || null;
-    const src = stored || (ISLAMIC_HOLIDAYS_ESTIMATES[yr] || []);
-    if (src.length) {
-      _iholMonth = new Date(src[0].date).getMonth();
+    // Default to the current month (only fall back to a holiday's month if we're
+    // viewing a year that isn't the current year, so there's something relevant to show)
+    const today = new Date();
+    if (yr === today.getFullYear()) {
+      _iholMonth = today.getMonth();
     } else {
-      _iholMonth = new Date().getMonth();
+      const stored = (DB.settings && DB.settings.islamicHolidays && DB.settings.islamicHolidays[yr]) || null;
+      const src = stored || (ISLAMIC_HOLIDAYS_ESTIMATES[yr] || []);
+      _iholMonth = src.length ? new Date(src[0].date).getMonth() : 0;
     }
     _iholInit();
   }
