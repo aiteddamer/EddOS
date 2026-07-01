@@ -13369,7 +13369,7 @@ function renderMonthly(){
     const rowYd = (_mirror && _mirror.years && _mirror.years[rowYr]) ? _mirror.years[rowYr] : null;
     const rowYs = (rowYd && rowYd.savingsSettings) ? rowYd.savingsSettings : {};
     const savingsTarget = rowYs.savingsTarget !== undefined ? +rowYs.savingsTarget : (+DB.settings.savingsTarget || 0);
-    const sr = savingsTarget > 0 ? d.net / savingsTarget : (d.income > 0 ? d.net / d.income : 0);
+    const sr = savingsTarget > 0 ? d.savings / savingsTarget : (d.income > 0 ? d.savings / d.income : 0);
     const barW = Math.max(0, Math.min(100, sr * 100));
     const barC = sr >= 1 ? 'var(--surplus)' : sr >= 0.5 ? 'var(--warn)' : sr >= 0 ? 'var(--accent)' : 'var(--deficit)';
     const mDate = new Date(rowYr, MO_NAMES.indexOf(mName), 1);
