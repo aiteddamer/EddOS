@@ -3293,7 +3293,7 @@ window._fbHandleEmailSubmit = function() {
           </select>
           <select id="budgetCatFilter" onchange="renderBudget()">
             <option value="">All Categories</option>
-          <option value="💼 Base Salary">💼 Base Salary</option><option value="🎯 Bonus">🎯 Bonus</option><option value="💰 Commission">💰 Commission</option><option value="🧑‍💻 Freelance / Side Work">🧑‍💻 Freelance / Side Work</option><option value="🏠 Rental Income">🏠 Rental Income</option><option value="📈 Investment Returns">📈 Investment Returns</option><option value="💵 Other Income">💵 Other Income</option><option value="💳 Credit/Loan">💳 Credit/Loan</option><option value="🏠 Rent/Housing">🏠 Rent/Housing</option><option value="🛒 Food/Groceries">🛒 Food/Groceries</option><option value="🚗 Transport">🚗 Transport</option><option value="💡 Utilities">💡 Utilities</option><option value="🏥 Health &amp; Medical">🏥 Health &amp; Medical</option><option value="💻 Technology">💻 Technology</option><option value="🎬 Entertainment">🎬 Entertainment</option><option value="🏋️ Fitness">🏋️ Fitness</option><option value="✈️ Travel">✈️ Travel</option><option value="📚 Education">📚 Education</option><option value="👗 Clothing">👗 Clothing</option><option value="🍽️ Dining Out">🍽️ Dining Out</option><option value="💊 Pharmacy">💊 Pharmacy</option><option value="🧴 Personal Care">🧴 Personal Care</option><option value="🎁 Gifts / Donations">🎁 Gifts / Donations</option><option value="🔄 Subscriptions">🔄 Subscriptions</option><option value="💸 Other Expense">💸 Other Expense</option><option value="💳 Credit/Loan">💳 Credit/Loan</option></select>
+          <option value="💼 Base Salary">💼 Base Salary</option><option value="🎯 Bonus">🎯 Bonus</option><option value="💰 Commission">💰 Commission</option><option value="🧑‍💻 Freelance / Side Work">🧑‍💻 Freelance / Side Work</option><option value="🏠 Rental Income">🏠 Rental Income</option><option value="📈 Investment Returns">📈 Investment Returns</option><option value="💵 Other Income">💵 Other Income</option><option value="💳 Credit/Loan">💳 Credit/Loan</option><option value="🏠 Rent/Housing">🏠 Rent/Housing</option><option value="🛒 Food/Groceries">🛒 Food/Groceries</option><option value="🚗 Transport">🚗 Transport</option><option value="💡 Utilities">💡 Utilities</option><option value="🏥 Health &amp; Medical">🏥 Health &amp; Medical</option><option value="💻 Technology">💻 Technology</option><option value="🎬 Entertainment">🎬 Entertainment</option><option value="🎮 Gaming">🎮 Gaming</option><option value="🏋️ Fitness">🏋️ Fitness</option><option value="✈️ Travel">✈️ Travel</option><option value="📚 Education">📚 Education</option><option value="👗 Clothing">👗 Clothing</option><option value="🍽️ Dining Out">🍽️ Dining Out</option><option value="💊 Pharmacy">💊 Pharmacy</option><option value="🧴 Personal Care">🧴 Personal Care</option><option value="🎁 Gifts / Donations">🎁 Gifts / Donations</option><option value="🔄 Subscriptions">🔄 Subscriptions</option><option value="💰 Savings">💰 Savings</option><option value="💸 Other Expense">💸 Other Expense</option><option value="💳 Credit/Loan">💳 Credit/Loan</option></select>
           <input id="budgetSearch" placeholder="🔍 Search..." oninput="renderBudget()" style="width:180px">
           <button class="btn-primary" onclick="openAddModal()">+ Add</button>
         </div>
@@ -8892,8 +8892,25 @@ window._fbHandleEmailSubmit = function() {
         <div id="settingsCountryInfo" style="margin-top:10px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;padding:7px 10px;background:var(--surface2);border-radius:6px"></div>
       </div>
       </div>
+
+    <div class="bonus-kpi" id="savingsKpis"></div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Cumulative Savings (💰 Savings category) — <span id="savingsChartYearLabel"></span></div>
+        <canvas id="savingsPlanChart"></canvas>
+      </div>
     </div>
-  
+
+    <div class="table-card">
+      <div class="section-header">
+        <div class="card-title" style="margin:0"><span class="dot" style="background:var(--accent2)"></span> Monthly Savings Progress</div>
+        <div class="sep"></div>
+        <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Based on transactions tagged 💰 Savings — log a transfer to savings as an expense with that category to have it show up here</span>
+      </div>
+      <table id="savingsTable"><thead><tr><th>Month</th><th>Target</th><th>Actual</th><th>Difference</th><th>Cumulative</th><th>% of Target</th><th>Status</th><th>Progress</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
 
   <!-- CREDITS -->
   <div class="content" id="page-credits">
@@ -10790,7 +10807,7 @@ window._fbHandleEmailSubmit = function() {
         </div>
         <div class="form-group">
           <label class="form-label">Category</label>
-          <select class="form-input" id="tx_category" onchange="toggleFriendTag()"><option>🏠 Rent/Housing</option><option>🛒 Food/Groceries</option><option>🚗 Transport</option><option>💡 Utilities</option><option>🏥 Health &amp; Medical</option><option>💻 Technology</option><option>🎬 Entertainment</option><option>🏋️ Fitness</option><option>✈️ Travel</option><option>📚 Education</option><option>👗 Clothing</option><option>🍽️ Dining Out</option><option>💊 Pharmacy</option><option>🧴 Personal Care</option><option>🎁 Gifts / Donations</option><option>🔄 Subscriptions</option><option>💸 Other Expense</option><option>💳 Credit/Loan</option></select>
+          <select class="form-input" id="tx_category" onchange="toggleFriendTag()"><option>🏠 Rent/Housing</option><option>🛒 Food/Groceries</option><option>🚗 Transport</option><option>💡 Utilities</option><option>🏥 Health &amp; Medical</option><option>💻 Technology</option><option>🎬 Entertainment</option><option>🎮 Gaming</option><option>🏋️ Fitness</option><option>✈️ Travel</option><option>📚 Education</option><option>👗 Clothing</option><option>🍽️ Dining Out</option><option>💊 Pharmacy</option><option>🧴 Personal Care</option><option>🎁 Gifts / Donations</option><option>🔄 Subscriptions</option><option>💰 Savings</option><option>💸 Other Expense</option><option>💳 Credit/Loan</option></select>
         </div>
         <div class="form-group">
           <label class="form-label">Amount (MAD)</label>
@@ -10965,7 +10982,7 @@ window._fbHandleEmailSubmit = function() {
         <div class="form-group full"><label class="form-label">Service Name</label><input class="form-input" id="sub_name" placeholder="e.g. Netflix, Spotify…"></div>
         <div class="form-group"><label class="form-label">Category</label>
           <select class="form-input" id="sub_cat">
-            <option>📱 Phone/Internet</option><option>🏋️ Fitness</option><option>🎬 Entertainment</option>
+            <option>📱 Phone/Internet</option><option>🏋️ Fitness</option><option>🎬 Entertainment</option><option>🎮 Gaming</option>
             <option>💻 Technology</option><option>📚 Education</option><option>🔄 Subscriptions</option>
           </select>
         </div>
@@ -12356,9 +12373,9 @@ let MONTHS = MO_NAMES.map(m => m + ' ' + activeYear);
 const DEFAULT_BUDGETS = {
   '🏠 Rent/Housing':2100,'🛒 Food/Groceries':1500,'🍽️ Dining Out':500,
   '🚗 Transport':500,'💡 Utilities':400,'🏥 Health & Medical':300,
-  '💻 Technology':500,'🏋️ Fitness':300,'✈️ Travel':1000,
+  '💻 Technology':500,'🎮 Gaming':300,'🏋️ Fitness':300,'✈️ Travel':1000,
   '📚 Education':500,'🎁 Gifts / Donations':300,'💊 Pharmacy':200,
-  '🧴 Personal Care':200,'💸 Other Expense':500
+  '🧴 Personal Care':200,'💰 Savings':2000,'💸 Other Expense':500
 };
 
 function setActiveYear(y) {
@@ -12516,7 +12533,7 @@ function repopulateMonthSelects() {
 }
 
 const INCOME_CATS = ['💼 Base Salary','🎯 Bonus','💰 Commission','🧑‍💻 Freelance / Side Work','🏠 Rental Income','📈 Investment Returns','💵 Other Income','💳 Credit/Loan'];
-const EXPENSE_CATS = ['🏠 Rent/Housing','🛒 Food/Groceries','🚗 Transport','💡 Utilities','🏥 Health & Medical','💻 Technology','🎬 Entertainment','🏋️ Fitness','✈️ Travel','📚 Education','👗 Clothing','🍽️ Dining Out','💊 Pharmacy','🧴 Personal Care','🎁 Gifts / Donations','🔄 Subscriptions','💸 Other Expense','💳 Credit/Loan'];
+const EXPENSE_CATS = ['🏠 Rent/Housing','🛒 Food/Groceries','🚗 Transport','💡 Utilities','🏥 Health & Medical','💻 Technology','🎬 Entertainment','🎮 Gaming','🏋️ Fitness','✈️ Travel','📚 Education','👗 Clothing','🍽️ Dining Out','💊 Pharmacy','🧴 Personal Care','🎁 Gifts / Donations','🔄 Subscriptions','💰 Savings','💸 Other Expense','💳 Credit/Loan'];
 
 // ─── NAV ────────────────────────────────────────────────────────────────────
 const PAGE_META = {
@@ -12583,15 +12600,22 @@ const pct = n => isNaN(n) ? '—' : (+(n)*100).toFixed(1)+'%';
 
 function getMonthTotals(){
   const months = {};
-  MONTHS.forEach(m=>{ months[m]={income:0,expenses:0,net:0}; });
+  MONTHS.forEach(m=>{ months[m]={income:0,expenses:0,net:0,savings:0}; });
   DB.transactions.forEach(t=>{
     // Only count transactions whose month is within the current scope
     if(!t.month || !months[t.month]) return;
     if(t.type==='💰 Income') months[t.month].income += +t.amount||0;
-    else months[t.month].expenses += +t.amount||0;
+    else {
+      months[t.month].expenses += +t.amount||0;
+      // Track money explicitly moved to savings separately, so it can be
+      // reported apart from "leftover in main account" (see Savings Plan page).
+      if(t.category==='💰 Savings') months[t.month].savings += +t.amount||0;
+    }
   });
   // NOTE: Subscriptions are already logged as expense transactions via syncSubToLedger.
   // Do NOT add them here again — that would double-count them.
+  // net = money left in the main account after ALL outflows, including transfers to savings.
+  // savings = the portion of those outflows that was deliberately set aside (💰 Savings category).
   Object.values(months).forEach(m=>m.net = m.income - m.expenses);
   return months;
 }
@@ -15177,10 +15201,31 @@ function renderSavings(){
   }
 
   const mt = getMonthTotals();
+  const target = +ys.savingsTarget || 0;
+
+  // ── KPIs: money deliberately set aside (💰 Savings cat) vs. money simply left ──
+  // over in the main account (income minus every outflow, including savings transfers).
+  let periodSavings = 0, periodLeftover = 0, monthsWithData = 0;
+  MONTHS.forEach(m=>{
+    periodSavings += mt[m].savings;
+    periodLeftover += mt[m].net;
+    if(mt[m].income!==0 || mt[m].expenses!==0) monthsWithData++;
+  });
+  const periodTarget = target * (monthsWithData||0);
+  const kpis = document.getElementById('savingsKpis');
+  if (kpis) {
+    kpis.innerHTML = [
+      {label:`🎯 Target (${monthsWithData||0} mo.)`, val:fmt(periodTarget)+' MAD', color:'var(--text)', sub:`${fmt(target)} MAD/mo`},
+      {label:'💰 Saved to Savings', val:fmt(periodSavings)+' MAD', color:'var(--accent2)', sub:'From 💰 Savings category'},
+      {label:'🏦 Left in Main Account', val:fmt(periodLeftover)+' MAD', color:periodLeftover>=0?'var(--surplus)':'var(--deficit)', sub:'Income − all expenses'},
+      {label:'📊 Total Set Aside', val:fmt(periodSavings+periodLeftover)+' MAD', color:'var(--accent)', sub:'Savings + main account leftover'},
+    ].map(k=>`<div class="bonus-kpi-item"><div class="bonus-kpi-val" style="color:${k.color}">${k.val}</div><div class="bonus-kpi-label">${k.label}</div><div style="font-size:9px;color:var(--text3);margin-top:2px">${k.sub}</div></div>`).join('');
+  }
+
+  // ── Monthly table — "Actual" = money moved into 💰 Savings that month ──
   let cum = 0;
   const rows = MONTHS.map(m=>{
-    const actual = mt[m].net;
-    const target = +ys.savingsTarget || 0;
+    const actual = mt[m].savings;
     cum += actual;
     const diff = actual - target;
     const pctV = target>0?actual/target:0;
@@ -15199,6 +15244,40 @@ function renderSavings(){
     </tr>`;
   }).join('');
   const _st = document.getElementById('savingsTable'); if(_st) _st.innerHTML = `<thead><tr><th>Month</th><th>Target</th><th>Actual</th><th>Difference</th><th>Cumulative</th><th>% of Target</th><th>Status</th><th >Progress</th></tr></thead><tbody>${rows}</tbody>`;
+
+  // ── Cumulative Savings chart (💰 Savings category only) ──
+  const ycl = document.getElementById('savingsChartYearLabel'); if(ycl) ycl.textContent = yearLabel;
+  const canvas = document.getElementById('savingsPlanChart');
+  if (canvas) {
+    let existing = Chart.getChart(canvas);
+    if (existing) existing.destroy();
+    let c2 = 0;
+    const labels = [], data = [];
+    MONTHS.forEach(m=>{
+      c2 += mt[m].savings;
+      labels.push(m.split(' ')[0].slice(0,3) + (activeYear==='all' ? ` '${m.split(' ')[1].slice(2)}` : ''));
+      data.push(+c2.toFixed(2));
+    });
+    new Chart(canvas, {
+      type:'line',
+      data:{labels, datasets:[{
+        label:'Cumulative Saved (MAD)',
+        data,
+        borderColor:cAccent2(0.9),
+        backgroundColor:cAccent2(0.08),
+        fill:true, tension:0.4, borderWidth:2.5,
+        pointBackgroundColor:cAccent2(1),
+        pointRadius:3
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{labels:{color:chartTextColor(),font:{size:11}}}},
+        scales:{
+          x:{ticks:{color:chartTextColor(),font:{size:10}}},
+          y:{ticks:{color:chartTextColor(),callback:v=>v>=1000?(v/1000).toFixed(1)+'k':v},grid:{color:chartGridColor()}}
+        }
+      }
+    });
+  }
 }
 
 // ─── CREDITS ────────────────────────────────────────────────────────────────
@@ -16450,7 +16529,7 @@ function renderSubs(){
     </div>` : '';
 
   // ── Subscription cards ────────────────────────────────────────────────────
-  const cats = {'📱 Phone/Internet':'📶','🏋️ Fitness':'💪','🎬 Entertainment':'🎬','💻 Technology':'💻','📚 Education':'📖','🔄 Subscriptions':'🔄'};
+  const cats = {'📱 Phone/Internet':'📶','🏋️ Fitness':'💪','🎬 Entertainment':'🎬','🎮 Gaming':'🎮','💻 Technology':'💻','📚 Education':'📖','🔄 Subscriptions':'🔄','💰 Savings':'💰'};
   const paidSubs = yearSubs.filter(s => s.tier !== 'trial' && s.tier !== 'free');
   const subCards = paidSubs.map(s => {
     // Renewal badge
