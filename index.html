@@ -13392,19 +13392,20 @@ function renderMonthly(){
     const barC = sr >= 1 ? 'var(--surplus)' : sr >= 0.5 ? 'var(--warn)' : sr >= 0 ? 'var(--accent)' : 'var(--deficit)';
     const mDate = new Date(rowYr, MO_NAMES.indexOf(mName), 1);
     const subCost = DB.subscriptions.filter(s2=>s2.status==='🟢 Active' && (!s2.start || new Date(s2.start) <= mDate)).reduce((a,s2)=>a+(+s2.amount||0),0);
-    if(!noData) cumNet += d.net;
+    if(!noData) cumNet += d.income - d.expenses;
     const isCur = m === curM;
     return `<tr${isCur?' style="background:rgba(var(--accent-rgb),0.04)"':''}>
       <td><b>${m}</b>${isCur?' <span style="font-size:9px;background:rgba(var(--accent-rgb),0.15);color:var(--accent);padding:1px 6px;border-radius:4px;font-family:DM Mono,monospace">NOW</span>':''}</td>
       <td class="amount-pos">${fmt(d.income)}</td>
       <td class="amount-neg">${fmt(d.expenses)}</td>
+      <td style="color:var(--accent3)">${fmt(d.savings||0)}</td>
       <td class="${d.net>=0?'amount-pos':'amount-neg'}">${noData?'—':fmt(d.net)}</td>
-      <td style="min-width:80px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barC};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">${(savingsTarget>0||d.income>0)?pct(sr):'—'}</span></div></td>
-      <td class="amount-neu">${fmt(subCost)}</td>
+      <td style="min-width:90px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barC};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;min-width:34px">${(savingsTarget>0||d.income>0)?pct(sr):'—'}</span></div></td>
       <td><span class="tag ${sc}">${icon} ${s}</span></td>
+      <td class="${cumNet>=0?'amount-pos':'amount-neg'}" style="font-family:'DM Mono',monospace;font-size:11px">${noData?'—':fmt(cumNet)}</td>
     </tr>`;
   }).join('');
-  document.getElementById('monthlyTable').innerHTML = `<thead><tr><th>Month</th><th>Income</th><th>Expenses</th><th>Net Saved</th><th>Savings %</th><th>Subs/mo</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No data yet</td></tr>'}</tbody>`;
+  document.getElementById('monthlyTable').innerHTML = `<thead><tr><th>Month</th><th>Income (MAD)</th><th>Expenses</th><th>Saved</th><th>Net Saved</th><th>Savings %</th><th>Status</th><th>Cumulative Net</th></tr></thead><tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">No data yet</td></tr>'}</tbody>`;
   const cats = getCategoryTotals(fm);
   const total = Object.values(cats).reduce((a,v)=>a+v,0);
   const catRows = Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([c,v])=>{
