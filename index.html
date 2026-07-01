@@ -13077,10 +13077,19 @@ function renderDashboard(){
 }
 
 // ─── BUDGET ─────────────────────────────────────────────────────────────────
+let _budgetMonthFilterDefaulted = false;
 function renderBudget(){
   // Populate filters
   const mf = document.getElementById('budgetMonthFilter');
   if(mf.options.length<=1){ MONTHS.forEach(m=>{const o=document.createElement('option');o.value=m;o.text=m;mf.appendChild(o);}); }
+  // Default to the current month the first time this page renders — after that,
+  // respect whatever the user picks (including switching back to "All Months").
+  if(!_budgetMonthFilterDefaulted){
+    _budgetMonthFilterDefaulted = true;
+    const today = new Date();
+    const curMonth = MO_NAMES[today.getMonth()] + ' ' + today.getFullYear();
+    if([...mf.options].some(o=>o.value===curMonth)) mf.value = curMonth;
+  }
   const cf = document.getElementById('budgetCatFilter');
   if(cf.options.length<=1){[...INCOME_CATS,...EXPENSE_CATS].forEach(c=>{const o=document.createElement('option');o.value=c;o.text=c;cf.appendChild(o);});}
   const month = mf.value, type = document.getElementById('budgetTypeFilter').value;
