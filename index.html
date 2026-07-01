@@ -17458,8 +17458,11 @@ function syncSubToLedger(s) {
     DB.transactions = DB.transactions.filter(t => t.subId !== s.id || t.manuallyEdited);
   }
 
-  // Only create transactions for active subscriptions with an amount
-  if (s.status !== '🟢 Active' || !s.amount || s.amount <= 0) return;
+  // Only need a valid amount to (re)generate history. Status doesn't gate whether we
+  // generate at all — it only affects the END of the date range below (cancelledOn caps
+  // it). Bailing out here for non-Active subs was wiping the ENTIRE transaction history
+  // of any cancelled/paused subscription and never recreating it — fixed.
+  if (!s.amount || s.amount <= 0) return;
 
   const today = new Date();
   // Start from the subscription's actual start date (or beginning of current year if none)
