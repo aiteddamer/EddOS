@@ -12946,7 +12946,7 @@ function renderDashboard(){
       const yExp = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
       const ySav = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
       const yNet = yInc - yExp - ySav;
-      cumNet += yNet;
+      cumNet += yInc - yExp; // cumulative wealth: savings are still yours, so don't subtract them out permanently
       const noData = yInc === 0 && yExp === 0;
       const s = noData ? '— No Data' : yNet < 0 ? '⚠️ Deficit' : '✅ Surplus';
       const sc = s.includes('Surplus')?'tag-surplus':s.includes('Deficit')?'tag-deficit':'tag-nodata';
