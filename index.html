@@ -313,6 +313,7 @@ tr:hover td{background:var(--surface2)}
 .tag-surplus{background:rgba(63,185,80,0.15);color:var(--surplus)}
 .tag-deficit{background:rgba(248,81,73,0.15);color:var(--deficit)}
 .tag-nodata{background:var(--surface3);color:var(--text3)}
+.tag-warn{background:rgba(230,161,63,0.15);color:var(--warn)}
 .tag-paid{background:rgba(var(--accent-rgb),0.15);color:var(--accent)}
 .tag-pending{background:rgba(255,159,67,0.15);color:var(--warn)}
 .tag-partial{background:rgba(var(--accent3-rgb),0.15);color:var(--accent3)}
@@ -12979,11 +12980,22 @@ function renderDashboard(){
       <thead><tr><th>Year</th><th>Income (MAD)</th><th>Expenses</th><th>Net Saved</th><th >Savings %</th><th>Status</th><th>Cumulative Net</th></tr></thead>
       <tbody>${tbody2}</tbody>`;
   } else {
+    let cumNetM = 0; // running reserve: carries surplus/deficit forward month to month within the year
     const tbody = MONTHS.map(m=>{
-      const d = mt[m] || {income:0,expenses:0,net:0};
-      const s = d.income===0&&d.expenses===0?'— No Data':d.net<0?'⚠️ Deficit':'✅ Surplus';
-      const sc = s.includes('Surplus')?'tag-surplus':s.includes('Deficit')?'tag-deficit':'tag-nodata';
-      const icon = s.includes('Surplus')?'✅':s.includes('Deficit')?'⚠️':'—';
+      const d = mt[m] || {income:0,expenses:0,net:0,savings:0};
+      const noData = d.income===0&&d.expenses===0&&(d.savings||0)===0;
+      const reserveBefore = cumNetM; // leftover cash carried in from prior months, before this month's flows
+      if(!noData) cumNetM += d.net;
+      const reserveAfter = cumNetM;
+      // A month can show a "Net Saved" deficit (income - expenses - savings < 0) while still being
+      // financially fine, if the shortfall (e.g. extra money moved to savings) is covered by leftover
+      // reserve carried forward from previous surplus months. Only call it a real Deficit if the
+      // running balance actually goes negative.
+      let s, sc, icon;
+      if(noData){ s='No Data'; sc='tag-nodata'; icon='—'; }
+      else if(d.net>=0){ s='Surplus'; sc='tag-surplus'; icon='✅'; }
+      else if(reserveAfter>=0){ s='Reserve Used'; sc='tag-warn'; icon='🛡️'; }
+      else { s='Deficit'; sc='tag-deficit'; icon='⚠️'; }
       const [_mn, _myr] = m.split(' ');
       const _rowYd = (_mirror && _mirror.years && _mirror.years[+_myr]) ? _mirror.years[+_myr] : null;
       const _rowYs = (_rowYd && _rowYd.savingsSettings) ? _rowYd.savingsSettings : {};
@@ -12994,18 +13006,21 @@ function renderDashboard(){
       const isNow = m===curMonthNow;
       const isView = m===viewMonthKey && !isNow;
       const rowStyle = isNow ? 'background:rgba(var(--accent-rgb),0.05)' : isView ? 'background:rgba(var(--accent2-rgb),0.05)' : '';
-      return `<tr${rowStyle?' style="'+rowStyle+'"':''}>
+      const reserveTitle = (!noData && d.net<0) ? ` title="Reserve before this month: ${fmt(reserveBefore)} MAD → after: ${fmt(reserveAfter)} MAD"` : '';
+      return `<tr${rowStyle?' style="'+rowStyle+'"':''}${reserveTitle}>
         <td><b>${m}</b>${isNow?` <span style="font-size:9px;background:rgba(var(--accent-rgb),0.15);color:var(--accent);padding:1px 6px;border-radius:4px;font-family:'DM Mono',monospace">NOW</span>`:''}${isView?` <span style="font-size:9px;background:rgba(var(--accent2-rgb),0.15);color:var(--accent2);padding:1px 6px;border-radius:4px;font-family:'DM Mono',monospace">VIEW</span>`:''}</td>
         <td class="amount-pos">${fmt(d.income)}</td>
         <td class="amount-neg">${fmt(d.expenses)}</td>
+        <td style="color:var(--accent3)">${fmt(d.savings||0)}</td>
         <td class="${d.net>=0?'amount-pos':'amount-neg'}">${fmt(d.net)}</td>
         <td style="min-width:90px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barColor};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;min-width:34px">${(_savingsTarget>0||d.income>0)?pct(sr2):'—'}</span></div></td>
-        <td><span class="tag ${sc}">${icon} ${s.replace('— ','')}</span></td>
+        <td><span class="tag ${sc}">${icon} ${s}</span></td>
+        <td class="${reserveAfter>=0?'amount-pos':'amount-neg'}" style="font-family:'DM Mono',monospace;font-size:11px">${noData?'—':fmt(reserveAfter)}</td>
       </tr>`;
     }).join('');
     document.getElementById('monthlySummaryTable').innerHTML = `
-      <thead><tr><th>Month</th><th>Income (MAD)</th><th>Expenses</th><th>Net Saved</th><th >Savings %</th><th>Status</th></tr></thead>
-      <tbody>${tbody||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:32px">No data</td></tr>'}</tbody>`;
+      <thead><tr><th>Month</th><th>Income (MAD)</th><th>Expenses</th><th>Saved</th><th>Net Saved</th><th >Savings %</th><th>Status</th><th>Reserve Balance</th></tr></thead>
+      <tbody>${tbody||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">No data</td></tr>'}</tbody>`;
   }
 }
 
