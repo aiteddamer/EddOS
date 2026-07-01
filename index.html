@@ -12959,6 +12959,7 @@ function renderDashboard(){
         <td><b>${yr}</b>${isNow?` <span style="font-size:9px;background:rgba(var(--accent-rgb),0.15);color:var(--accent);padding:1px 6px;border-radius:4px;font-family:'DM Mono',monospace">NOW</span>`:''}</td>
         <td class="amount-pos">${fmt(yInc)}</td>
         <td class="amount-neg">${fmt(yExp)}</td>
+        <td style="color:var(--accent3)">${fmt(ySav)}</td>
         <td class="${yNet>=0?'amount-pos':'amount-neg'}">${fmt(yNet)}</td>
         <td style="min-width:90px"><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;height:5px;background:var(--surface3);border-radius:3px;overflow:hidden"><div style="height:100%;width:${barW}%;background:${barColor};border-radius:3px"></div></div><span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;min-width:34px">${yInc>0?pct(yrSr):'—'}</span></div></td>
         <td><span class="tag ${sc}">${icon} ${s.replace('— ','')}</span></td>
@@ -12967,17 +12968,19 @@ function renderDashboard(){
     }).join('');
     // totals row
     const totalSr = yearInc > 0 ? yearNet / yearInc : 0;
+    const totalYSav = chartYears2.reduce((a,yr)=>a+DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((s,t)=>s+(+t.amount||0),0),0);
     const tbody2 = tbody + `<tr style="border-top:2px solid var(--border2);font-weight:700">
       <td><b>TOTAL</b></td>
       <td class="amount-pos">${fmt(yearInc)}</td>
       <td class="amount-neg">${fmt(yearExp)}</td>
+      <td style="color:var(--accent3)">${fmt(totalYSav)}</td>
       <td class="${yearNet>=0?'amount-pos':'amount-neg'}">${fmt(yearNet)}</td>
       <td><span style="font-size:11px;font-family:'DM Mono',monospace;color:${totalSr>=0?'var(--surplus)':'var(--deficit)'}">${pct(totalSr)}</span></td>
       <td></td>
       <td></td>
     </tr>`;
     document.getElementById('monthlySummaryTable').innerHTML = `
-      <thead><tr><th>Year</th><th>Income (MAD)</th><th>Expenses</th><th>Net Saved</th><th >Savings %</th><th>Status</th><th>Cumulative Net</th></tr></thead>
+      <thead><tr><th>Year</th><th>Income (MAD)</th><th>Expenses</th><th>Saved</th><th>Net Saved</th><th >Savings %</th><th>Status</th><th>Cumulative Net</th></tr></thead>
       <tbody>${tbody2}</tbody>`;
   } else {
     let cumNetM = 0; // running reserve: carries surplus/deficit forward month to month within the year
@@ -13000,7 +13003,7 @@ function renderDashboard(){
       const _rowYd = (_mirror && _mirror.years && _mirror.years[+_myr]) ? _mirror.years[+_myr] : null;
       const _rowYs = (_rowYd && _rowYd.savingsSettings) ? _rowYd.savingsSettings : {};
       const _savingsTarget = _rowYs.savingsTarget !== undefined ? +_rowYs.savingsTarget : (+DB.settings.savingsTarget || 0);
-      const sr2 = _savingsTarget > 0 ? d.net / _savingsTarget : (d.income > 0 ? d.net / d.income : 0);
+      const sr2 = _savingsTarget > 0 ? (d.savings||0) / _savingsTarget : (d.income > 0 ? (d.savings||0) / d.income : 0);
       const barW = Math.max(0,Math.min(100,sr2*100));
       const barColor = sr2>=1?'var(--surplus)':sr2>=0.5?'var(--warn)':sr2>=0?'var(--accent)':'var(--deficit)';
       const isNow = m===curMonthNow;
