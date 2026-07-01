@@ -17212,15 +17212,67 @@ function updateSavingsPreview() {
   }
 }
 
+// Logs a ledger transaction (type Expense, category 💰 Savings) so money set aside
+// via goal/wishlist "saved" fields is reflected in Net Saved, Year Comparison,
+// and every other place that derives totals from DB.transactions.
+// Routes through the same _mirror year-bucket logic as saveTransaction() so it
+// lands in the correct year even while viewing 'all' years or a different year.
+function _addSavingsTransaction(amount, desc) {
+  amount = +amount || 0;
+  if (amount <= 0) return;
+  const today = new Date();
+  const txYear = today.getFullYear();
+  const date = today.toISOString().slice(0, 10);
+  const month = MO_NAMES[today.getMonth()] + ' ' + txYear;
+  const t = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    date, month,
+    type: '💸 Expense',
+    category: '💰 Savings',
+    amount: amount,
+    desc: desc || 'Savings contribution',
+    method: '🏦 Transfer',
+    recurring: 'No',
+    tags: 'savings-goal',
+    friendTag: '',
+    bonusEntryId: null,
+  };
+  const activeYearNum = activeYear === 'all' ? null : +activeYear;
+  if (activeYear === 'all' || txYear !== activeYearNum) {
+    if (!_mirror.years) _mirror.years = {};
+    if (!_mirror.years[txYear]) {
+      _mirror.years[txYear] = {};
+      YEAR_KEYS.forEach(k => { _mirror.years[txYear][k] = []; });
+      _mirror.years[txYear].bonusMonths = buildDefaultBonusMonths(txYear);
+    }
+    if (!_mirror.years[txYear].transactions) _mirror.years[txYear].transactions = [];
+    _mirror.years[txYear].transactions.push(t);
+    DB.transactions.push(t);
+    try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch (e) {}
+    if (_fsAutoSaveEnabled && _fsFileHandle) _debouncedFileSave();
+    if (activeYear !== 'all') {
+      DB.transactions = DB.transactions.filter(x => x.id !== t.id);
+    }
+  } else {
+    DB.transactions.push(t);
+  }
+}
+
 function saveUpdateSavings() {
   const id = +document.getElementById('updateSavings_id').value;
   const idx = DB.goals.findIndex(x => x.id === id);
   if (idx < 0) return;
   const newSaved = +document.getElementById('updateSavings_amount').value || 0;
+  const oldSaved = +DB.goals[idx].saved || 0;
+  const diff = newSaved - oldSaved;
   const target = +DB.goals[idx].target || 0;
   DB.goals[idx].saved = newSaved;
   DB.goals[idx].progressPct = target > 0 ? Math.min(100, Math.round((newSaved / target) * 100)) : 0;
   if (DB.goals[idx].progressPct >= 100) DB.goals[idx].status = '✅ Achieved';
+  // Reflect the added amount in the ledger's 💰 Savings category so it counts
+  // toward Net Saved / Year Comparison (only when saved amount increases —
+  // a downward correction doesn't retroactively remove a past transaction).
+  if (diff > 0) _addSavingsTransaction(diff, `Goal: ${DB.goals[idx].name || 'Savings goal'}`);
   _persistGoals();
   saveDB();
   closeModal('updateSavingsModal');
@@ -25530,6 +25582,9 @@ Currently saved: ${fmt(item.saved)} MAD
 Amount to add (MAD):`);
   if (!amt || isNaN(amt) || amt <= 0) return;
   item.saved = (item.saved || 0) + amt;
+  // Reflect the added amount in the ledger's 💰 Savings category so it counts
+  // toward Net Saved / Year Comparison, same as goal savings updates.
+  _addSavingsTransaction(amt, `Wishlist: ${item.name}`);
   if (item.saved >= item.price && item.status === 'saving') {
     item.status = 'ready';
     toast(`🎉 Goal reached for "${item.name}"! Ready to buy!`);
