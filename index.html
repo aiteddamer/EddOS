@@ -8845,6 +8845,24 @@ window._fbHandleEmailSubmit = function() {
 
   <!-- SAVINGS -->
   <div class="content" id="page-savings">
+    <div class="bonus-kpi" id="savingsKpis"></div>
+
+    <div class="charts-row">
+      <div class="chart-card">
+        <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Cumulative Savings (💰 Savings category) — <span id="savingsChartYearLabel"></span></div>
+        <canvas id="savingsPlanChart"></canvas>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <div class="section-header">
+        <div class="card-title" style="margin:0"><span class="dot" style="background:var(--accent2)"></span> Monthly Savings Progress</div>
+        <div class="sep"></div>
+        <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Based on transactions tagged 💰 Savings — log a transfer to savings as an expense with that category to have it show up here</span>
+      </div>
+      <table id="savingsTable"><thead><tr><th>Month</th><th>Target</th><th>Actual</th><th>Difference</th><th>Cumulative</th><th>% of Target</th><th>Status</th><th>Progress</th></tr></thead><tbody></tbody></table>
+    </div>
+
     <div class="settings-card">
       <div class="settings-title">⚙️ Savings Settings <span id="savingsYearBadge" style="font-size:11px;font-weight:500;color:var(--accent);font-family:'DM Mono',monospace;margin-left:8px"></span></div>
       <div class="settings-grid">
@@ -8892,24 +8910,6 @@ window._fbHandleEmailSubmit = function() {
         <div id="settingsCountryInfo" style="margin-top:10px;font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;padding:7px 10px;background:var(--surface2);border-radius:6px"></div>
       </div>
       </div>
-
-    <div class="bonus-kpi" id="savingsKpis"></div>
-
-    <div class="charts-row">
-      <div class="chart-card">
-        <div class="card-title"><span class="dot" style="background:var(--accent2)"></span> Cumulative Savings (💰 Savings category) — <span id="savingsChartYearLabel"></span></div>
-        <canvas id="savingsPlanChart"></canvas>
-      </div>
-    </div>
-
-    <div class="table-card">
-      <div class="section-header">
-        <div class="card-title" style="margin:0"><span class="dot" style="background:var(--accent2)"></span> Monthly Savings Progress</div>
-        <div class="sep"></div>
-        <span style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">Based on transactions tagged 💰 Savings — log a transfer to savings as an expense with that category to have it show up here</span>
-      </div>
-      <table id="savingsTable"><thead><tr><th>Month</th><th>Target</th><th>Actual</th><th>Difference</th><th>Cumulative</th><th>% of Target</th><th>Status</th><th>Progress</th></tr></thead><tbody></tbody></table>
-    </div>
   </div>
 
   <!-- CREDITS -->
@@ -11952,6 +11952,7 @@ function cAccent2(a) { return chartRgba('--accent2-rgb', a!=null?a:0.75); }
 function cAccent3(a) { return chartRgba('--accent3-rgb', a!=null?a:0.75); }
 function cSurplus(a) { return hexToRgba(_cssVar('--surplus')||'#34c759', a!=null?a:0.75); }
 function cDeficit(a) { return hexToRgba(_cssVar('--deficit')||'#ff3b30', a!=null?a:0.75); }
+function cSavings(a) { return hexToRgba('#eab308', a!=null?a:0.75); }
 function cAccent4(a) { return hexToRgba(_cssVar('--accent4')||'#af52de', a!=null?a:0.75); }
 function chartPalette() { return [cAccent(0.8),cAccent2(0.8),cAccent3(0.8),cSurplus(0.75),cDeficit(0.75),cAccent4(0.75),cAccent(0.5),cAccent2(0.5)]; }
 
@@ -12887,12 +12888,14 @@ function renderDashboard(){
     const chartLabels = chartYears.map(String);
     const chartInc = chartYears.map(yr => DB.transactions.filter(t=>t.type==='💰 Income'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0));
     const chartExp = chartYears.map(yr => DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0));
+    const chartSav = chartYears.map(yr => DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0));
     if(cashChart) cashChart.destroy();
     cashChart = new Chart(document.getElementById('cashflowChart'),{
       type:'bar',
       data:{labels:chartLabels,datasets:[
         {label:'Income',data:chartInc,backgroundColor:cSurplus(0.7),borderRadius:4},
         {label:'Expenses',data:chartExp,backgroundColor:cDeficit(0.7),borderRadius:4},
+        {label:'Savings',data:chartSav,backgroundColor:cSavings(0.7),borderRadius:4},
       ]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:chartTextColor(),font:{size:11}}}},scales:{x:{ticks:{color:chartTextColor(),font:{size:11}},grid:{color:chartGridColor()}},y:{ticks:{color:chartTextColor(),font:{size:10},callback:v=>(v/1000)+'k'},grid:{color:chartGridColor()}}}}
     });
@@ -12900,12 +12903,14 @@ function renderDashboard(){
     const labels = MONTHS.map(m=>m.split(' ')[0].slice(0,3));
     const incArr = MONTHS.map(m=>mt[m]?.income||0);
     const expArr = MONTHS.map(m=>mt[m]?.expenses||0);
+    const savArr = MONTHS.map(m=>mt[m]?.savings||0);
     if(cashChart) cashChart.destroy();
     cashChart = new Chart(document.getElementById('cashflowChart'),{
       type:'bar',
       data:{labels,datasets:[
         {label:'Income',data:incArr,backgroundColor:cSurplus(0.7),borderRadius:4},
         {label:'Expenses',data:expArr,backgroundColor:cDeficit(0.7),borderRadius:4},
+        {label:'Savings',data:savArr,backgroundColor:cSavings(0.7),borderRadius:4},
       ]},
       options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:chartTextColor(),font:{size:11}}}},scales:{x:{ticks:{color:chartTextColor(),font:{size:10}},grid:{color:chartGridColor()}},y:{ticks:{color:chartTextColor(),font:{size:10},callback:v=>(v/1000)+'k'},grid:{color:chartGridColor()}}}}
     });
