@@ -16483,7 +16483,29 @@ function renderFriendsHistory(){
 }
 
 // ─── SUBSCRIPTIONS ──────────────────────────────────────────────────────────
+// Auto-close subscriptions whose cancellation date has already passed — so a sub
+// marked "cancelled 2026-06-30" doesn't sit around still tagged 🟢 Active forever;
+// it flips to 🔴 Cancelled on its own once that date arrives, no manual edit needed.
+function autoCloseExpiredSubscriptions(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  let changed = false;
+  (DB.subscriptions||[]).forEach(s=>{
+    if(!s.cancelledOn) return;
+    if(s.status === '🔴 Cancelled' || s.status === '✅ Cancelled') return;
+    const d = new Date(s.cancelledOn); d.setHours(0,0,0,0);
+    if(!isNaN(d) && d <= today){
+      s.status = '🔴 Cancelled';
+      changed = true;
+    }
+  });
+  if(changed){
+    if(_mirror.config) _mirror.config.subscriptions = DB.subscriptions;
+    saveDB();
+  }
+  return changed;
+}
 function renderSubs(){
+  autoCloseExpiredSubscriptions();
   const yr = activeYear === 'all' ? null : +activeYear;
   const subs = DB.subscriptions;
   const yearSubs = yr ? subs.filter(s => {
@@ -21065,6 +21087,11 @@ function initApp() {
   // This is safe: it only writes auto-generated transactions (tags='income-source')
   // and never overwrites manually-edited ones.
   syncAllIncomeSourcesToAllYears();
+  // Auto-close any subscriptions whose cancellation date has already passed —
+  // must run before the ledger sync below so cancelled subs stop generating new charges.
+  if (typeof autoCloseExpiredSubscriptions === 'function') {
+    try { autoCloseExpiredSubscriptions(); } catch(e) {}
+  }
   // Auto-sync subscriptions to ledger (same logic — idempotent, respects manual locks)
   if (typeof syncAllSubsToLedger === 'function') {
     (DB.subscriptions || []).forEach(s => { try { syncSubToLedger(s); } catch(e) {} });
@@ -21136,6 +21163,11 @@ window._nmRolloverMarkSeen = function() {
 
         // 2. Full re-sync salary/income sources
         syncAllIncomeSourcesToAllYears();
+
+        // 2b. Auto-close subscriptions whose cancellation date has passed
+        if (typeof autoCloseExpiredSubscriptions === 'function') {
+          try { autoCloseExpiredSubscriptions(); } catch(e) {}
+        }
 
         // 3. Sync subscriptions
         (DB.subscriptions || []).forEach(s => { try { syncSubToLedger(s); } catch(e) {} });
