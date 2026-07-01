@@ -8965,6 +8965,16 @@ window._fbHandleEmailSubmit = function() {
       </div>
       <table id="assetsTable"><thead><tr><th>#</th><th>Asset</th><th>Category</th><th>Value (MAD)</th><th>Date</th><th>Notes</th><th></th></tr></thead><tbody><tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No assets</td></tr></tbody></table>
     </div>
+    <div class="table-card">
+      <div class="section-header">
+        <div class="card-title" style="margin:0"><span class="dot" style="background:var(--accent3)"></span> Cash Savings — Transactions</div>
+        <div class="sep"></div>
+        <span style="font-size:10px;color:var(--text3)" id="cashSavingsCount"></span>
+      </div>
+      <div style="max-height:420px;overflow-y:auto">
+        <table id="cashSavingsTable"><thead><tr><th>#</th><th>Date</th><th>Type</th><th>Category</th><th>Amount (MAD)</th><th>Running Total (MAD)</th></tr></thead><tbody><tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">No transactions</td></tr></tbody></table>
+      </div>
+    </div>
   </div>
 
   <!-- LEAVE -->
@@ -12708,16 +12718,35 @@ function activeGoals(){ return DB.goals.filter(g=>g.status==='🔄 In Progress')
 // so it naturally counts toward net worth as cash-on-hand. This lets Net Worth auto-grow with
 // whatever the user has actually saved, without needing a manual "asset" entry for it.
 function getAllTimeCumulativeSavings(){
+  const ledger = getCashSavingsLedger();
+  return ledger.length ? ledger[ledger.length-1]._running : 0;
+}
+// ── Full transaction ledger behind the Cash Savings figure ──
+// Every income transaction (+) and every non-"Savings" expense transaction (−),
+// across all years, in chronological order, with a running cumulative total.
+function getCashSavingsLedger(){
   const allYears = getAvailableYears();
-  let cum = 0;
+  let txs = [];
   allYears.forEach(yr => {
     const yd = (_mirror.years && _mirror.years[yr]) ? _mirror.years[yr] : {};
-    const txs = yd.transactions || [];
-    const yInc = txs.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    const yExp = txs.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
-    cum += yInc - yExp;
+    (yd.transactions || []).forEach(t => {
+      if (t.type === '💰 Income' || (t.type === '💸 Expense' && t.category !== '💰 Savings')) {
+        txs.push(t);
+      }
+    });
   });
-  return cum;
+  const dateOf = t => {
+    if (t.date) { const d = new Date(t.date); if (!isNaN(d)) return d; }
+    if (t.month) { const d = new Date(t.month + ' 1'); if (!isNaN(d)) return d; }
+    return new Date(0);
+  };
+  txs.sort((a,b) => dateOf(a) - dateOf(b));
+  let cum = 0;
+  return txs.map(t => {
+    const signedAmt = (+t.amount || 0) * (t.type === '💰 Income' ? 1 : -1);
+    cum += signedAmt;
+    return { ...t, _signedAmt: signedAmt, _running: cum, _dateSort: dateOf(t) };
+  });
 }
 function totalDebt(){
   return DB.loans.reduce((a,l)=>{
@@ -15505,6 +15534,26 @@ function renderNetWorth(){
     <td><button onclick="deleteAsset(${a.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:12px;padding:2px 6px" onmouseover="this.style.color='var(--deficit)'" onmouseout="this.style.color='var(--text3)'">✕</button></td>
   </tr>`).join('');
   document.getElementById('assetsTable').innerHTML = `<thead><tr><th>#</th><th>Asset</th><th>Category</th><th>Value (MAD)</th><th>Date</th><th>Notes</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">No assets</td></tr>'}</tbody>`;
+
+  // ── Cash Savings ledger: every transaction feeding the auto-added savings figure ──
+  const ledger = getCashSavingsLedger();
+  const ledgerDisplay = [...ledger].reverse(); // most recent first
+  const csRows = ledgerDisplay.map((t,idx) => {
+    const n = ledgerDisplay.length - idx;
+    const dateStr = t.date || (t.month || '');
+    const isIncome = t.type === '💰 Income';
+    return `<tr>
+      <td>${n}</td>
+      <td>${dateStr}</td>
+      <td>${t.type||''}</td>
+      <td>${t.category||''}${t.desc?` <span style="color:var(--text3);font-size:11px">· ${t.desc}</span>`:''}</td>
+      <td class="${isIncome?'amount-pos':'amount-neg'}">${isIncome?'+':'−'}${fmt(Math.abs(t._signedAmt))}</td>
+      <td class="${t._running>=0?'amount-pos':'amount-neg'}"><b>${fmt(t._running)}</b></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('cashSavingsTable').innerHTML = `<thead><tr><th>#</th><th>Date</th><th>Type</th><th>Category</th><th>Amount (MAD)</th><th>Running Total (MAD)</th></tr></thead><tbody>${csRows||'<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">No transactions</td></tr>'}</tbody>`;
+  const csCountEl = document.getElementById('cashSavingsCount');
+  if(csCountEl) csCountEl.textContent = `${ledger.length} transaction${ledger.length!==1?'s':''} · running total: ${fmt(cumSaved)} MAD`;
 }
 function deleteAsset(id){ const _a=DB.assets.find(x=>x.id===id); _historyPush('Delete asset' + (_a?': '+(_a.name||''):'')); DB.assets=DB.assets.filter(a=>a.id!==id); saveDB(); renderNetWorth(); }
 
