@@ -12605,18 +12605,21 @@ function getMonthTotals(){
     // Only count transactions whose month is within the current scope
     if(!t.month || !months[t.month]) return;
     if(t.type==='💰 Income') months[t.month].income += +t.amount||0;
-    else {
+    else if(t.category==='💰 Savings') {
+      // Money moved to savings is a balance-sheet transfer, not spending —
+      // keep it OUT of "expenses" so expense totals reflect real spending only.
+      months[t.month].savings += +t.amount||0;
+    } else {
       months[t.month].expenses += +t.amount||0;
-      // Track money explicitly moved to savings separately, so it can be
-      // reported apart from "leftover in main account" (see Savings Plan page).
-      if(t.category==='💰 Savings') months[t.month].savings += +t.amount||0;
     }
   });
   // NOTE: Subscriptions are already logged as expense transactions via syncSubToLedger.
   // Do NOT add them here again — that would double-count them.
-  // net = money left in the main account after ALL outflows, including transfers to savings.
-  // savings = the portion of those outflows that was deliberately set aside (💰 Savings category).
-  Object.values(months).forEach(m=>m.net = m.income - m.expenses);
+  // expenses = real spending only (excludes 💰 Savings transfers).
+  // savings  = money deliberately set aside (💰 Savings category) — leaves the main
+  //            account like an expense would, but it's not "spent", just moved.
+  // net      = money left in the main account after BOTH real spending AND savings transfers.
+  Object.values(months).forEach(m=>m.net = m.income - m.expenses - m.savings);
   return months;
 }
 
@@ -12636,11 +12639,15 @@ function totalIncome(){
   return DB.transactions.filter(t=>t.type==='💰 Income' && (activeYear==='all' || MONTHS.includes(t.month))).reduce((a,t)=>a+(+t.amount||0),0); 
 }
 function totalExpenses(){
-  // Only sum actual expense transactions — subscriptions are already logged as transactions
+  // Only sum real spending — 💰 Savings transfers are excluded (see totalSavings())
   // Use MONTHS scope — consistent with getMonthTotals
-  return DB.transactions.filter(t=>t.type==='💸 Expense' && (activeYear==='all' || MONTHS.includes(t.month))).reduce((a,t)=>a+(+t.amount||0),0);
+  return DB.transactions.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings' && (activeYear==='all' || MONTHS.includes(t.month))).reduce((a,t)=>a+(+t.amount||0),0);
 }
-function netSaved(){ return totalIncome()-totalExpenses(); }
+function totalSavings(){
+  // Money moved to savings — leaves the main account like an expense, but isn't spending
+  return DB.transactions.filter(t=>t.type==='💸 Expense' && t.category==='💰 Savings' && (activeYear==='all' || MONTHS.includes(t.month))).reduce((a,t)=>a+(+t.amount||0),0);
+}
+function netSaved(){ return totalIncome()-totalExpenses()-totalSavings(); }
 function savingsRate(){ const i=totalIncome(); return i>0?netSaved()/i:0; }
 function getLeaveYear() {
   return activeYear === 'all' ? new Date().getFullYear() : +activeYear;
@@ -12746,7 +12753,8 @@ function renderDashboard(){
   // ── All-years totals (always computed from full transaction set) ──
   const yearInc = totalIncome();
   const yearExp = totalExpenses();
-  const yearNet = yearInc - yearExp;
+  const yearSav = totalSavings();
+  const yearNet = yearInc - yearExp - yearSav;
   const sr = yearInc > 0 ? yearNet / yearInc : 0;
 
   // ── Month income & expenses for the "view month" (single-year mode) ──
@@ -12769,8 +12777,9 @@ function renderDashboard(){
     const allYrs = getAvailableYears();
     allYearsSummary = allYrs.map(yr => {
       const yInc = DB.transactions.filter(t=>t.type==='💰 Income'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
-      const yExp = DB.transactions.filter(t=>t.type==='💸 Expense'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
-      return { yr, inc: yInc, exp: yExp, net: yInc - yExp };
+      const yExp = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
+      const ySav = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
+      return { yr, inc: yInc, exp: yExp, sav: ySav, net: yInc - yExp - ySav };
     });
   }
 
@@ -12873,7 +12882,7 @@ function renderDashboard(){
     const chartYears = getAvailableYears();
     const chartLabels = chartYears.map(String);
     const chartInc = chartYears.map(yr => DB.transactions.filter(t=>t.type==='💰 Income'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0));
-    const chartExp = chartYears.map(yr => DB.transactions.filter(t=>t.type==='💸 Expense'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0));
+    const chartExp = chartYears.map(yr => DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0));
     if(cashChart) cashChart.destroy();
     cashChart = new Chart(document.getElementById('cashflowChart'),{
       type:'bar',
@@ -12924,8 +12933,9 @@ function renderDashboard(){
     let cumNet = 0;
     const tbody = chartYears2.map(yr => {
       const yInc = DB.transactions.filter(t=>t.type==='💰 Income'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
-      const yExp = DB.transactions.filter(t=>t.type==='💸 Expense'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
-      const yNet = yInc - yExp;
+      const yExp = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
+      const ySav = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
+      const yNet = yInc - yExp - ySav;
       cumNet += yNet;
       const noData = yInc === 0 && yExp === 0;
       const s = noData ? '— No Data' : yNet < 0 ? '⚠️ Deficit' : '✅ Surplus';
@@ -13301,14 +13311,19 @@ function renderMonthly(){
   const fm = mf.value;
   // Build month totals for all months
   const mt = {};
-  allMonths.forEach(m=>{ mt[m]={income:0,expenses:0,net:0}; });
+  allMonths.forEach(m=>{ mt[m]={income:0,expenses:0,net:0,savings:0}; });
   DB.transactions.forEach(t=>{
     if(!t.month||!mt[t.month]) return;
     // Exclude Credit/Loan from savings rate — they are balance-sheet movements, not real income/spending
     const isCreditLoan = (t.category||'').includes('Credit/Loan');
+    const isSavings = t.category==='💰 Savings';
     if(t.type==='💰 Income') {
       mt[t.month].income += +t.amount||0;
       if(!isCreditLoan) mt[t.month].incomeReal = (mt[t.month].incomeReal||0) + (+t.amount||0);
+    } else if(isSavings) {
+      // Money moved to savings is a transfer, not spending — track separately
+      // so "expenses" reflects real spending only (still reduces net below).
+      mt[t.month].savings += +t.amount||0;
     } else {
       mt[t.month].expenses += +t.amount||0;
       if(!isCreditLoan) mt[t.month].expensesReal = (mt[t.month].expensesReal||0) + (+t.amount||0);
@@ -13316,7 +13331,7 @@ function renderMonthly(){
   });
   // NOTE: Subscriptions are already in transactions (syncSubToLedger). Don't add again.
   allMonths.forEach(m=>{
-    mt[m].net = mt[m].income - mt[m].expenses;
+    mt[m].net = mt[m].income - mt[m].expenses - mt[m].savings;
     // Net and rate for savings % uses only real (non-loan) flows
     const ri = mt[m].incomeReal || 0;
     const re = mt[m].expensesReal || 0;
@@ -21059,11 +21074,14 @@ function renderYearCompare() {
   const yearData = years.map(y => {
     const yTx = allTx.filter(t => new Date(t.date).getFullYear() === y);
     const income = yTx.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    const expenses = yTx.filter(t=>t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
-    const net = income - expenses;
+    // 💰 Savings transactions are transfers, not spending — exclude from "expenses",
+    // track separately, but still subtract from net (leftover in main account).
+    const expenses = yTx.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
+    const savings = yTx.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
+    const net = income - expenses - savings;
     const sr = income > 0 ? net/income : 0;
     const bonusTx = yTx.filter(t=>t.type==='💰 Income'&&t.category==='🎯 Bonus').reduce((a,t)=>a+(+t.amount||0),0);
-    return { year:y, income, expenses, net, sr, bonusTx, txCount:yTx.length };
+    return { year:y, income, expenses, savings, net, sr, bonusTx, txCount:yTx.length };
   });
   const cur = yearData.find(d=>d.year===activeYear) || yearData[yearData.length-1];
   const prev = yearData.find(d=>d.year===activeYear-1) || yearData[yearData.length-2] || {income:0,expenses:0,net:0,sr:0};
