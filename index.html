@@ -12626,7 +12626,11 @@ function getMonthTotals(){
 function getCategoryTotals(filterMonth=''){
   const cats = {};
   // Subs are already in transactions — just sum expense transactions directly
+  // Exclude 💰 Savings — it's a balance-sheet transfer, not spending, and is
+  // already tracked separately (see totalSavings()/netSaved()). Keeping it out
+  // here is what keeps category breakdowns, Net Saved, and Year Comparison in sync.
   DB.transactions.filter(t=>t.type==='💸 Expense'
+    &&t.category!=='💰 Savings'
     &&(!filterMonth||t.month===filterMonth)
     &&(activeYear==='all'||MONTHS.includes(t.month))
   ).forEach(t=>{
