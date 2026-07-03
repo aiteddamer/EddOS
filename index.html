@@ -16958,6 +16958,18 @@ function onBonusEntryLinkChange(){
 function saveTransaction(){
   const date = document.getElementById('tx_date').value;
   if (!date) { toast('⚠️ Please select a date'); return; }
+
+  // ── Confirm Payment Method before saving ────────────────────────────────
+  // Payment Method silently defaults to 🏦 Transfer if never touched, and it
+  // drives the Bank/Wallet split — an unnoticed wrong value here quietly
+  // throws off the balance. One quick confirm catches that before it's saved.
+  const methodEl = document.getElementById('tx_method');
+  const selectedMethod = methodEl ? methodEl.value : '';
+  if (!confirm(`Confirm Payment Method: ${selectedMethod}\n\nClick Cancel to go back and change it.`)) {
+    if (methodEl) methodEl.focus();
+    return;
+  }
+
   const d = new Date(date);
   const txYear = d.getFullYear();
   const month = MO_NAMES[d.getMonth()] + ' ' + txYear;
