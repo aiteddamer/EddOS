@@ -12645,8 +12645,13 @@ function getMonthTotals(){
   // expenses = real spending only (excludes 💰 Savings transfers).
   // savings  = money deliberately set aside (💰 Savings category) — leaves the main
   //            account like an expense would, but it's not "spent", just moved.
-  // net      = money left in the main account after BOTH real spending AND savings transfers.
-  Object.values(months).forEach(m=>m.net = m.income - m.expenses - m.savings);
+  // net      = money left in the main account after BOTH real spending AND savings transfers
+  //            (i.e. leftover, EXCLUDING money already moved to 💰 Savings — used by the
+  //            Savings page to show "left in main account" separately from "saved").
+  // netTotal = TRUE net = income - expenses (INCLUDES money moved to savings, since that
+  //            money is still yours). Use this wherever "Net"/"Cumulative Savings" should
+  //            reflect everything not spent, not just the unallocated leftover.
+  Object.values(months).forEach(m=>{ m.net = m.income - m.expenses - m.savings; m.netTotal = m.income - m.expenses; });
   return months;
 }
 
@@ -12833,10 +12838,10 @@ function renderDashboard(){
 
   // ── Month income & expenses for the "view month" (single-year mode) ──
   const mt = getMonthTotals();
-  const viewMonthData = mt[viewMonthKey] || { income: 0, expenses: 0, net: 0 };
+  const viewMonthData = mt[viewMonthKey] || { income: 0, expenses: 0, net: 0, netTotal: 0 };
   const curInc = isAllYears ? yearInc : viewMonthData.income;
   const curExp = isAllYears ? yearExp : viewMonthData.expenses;
-  const curNet = isAllYears ? yearNet : viewMonthData.net;
+  const curNet = isAllYears ? yearNet : viewMonthData.netTotal;
 
   const td = totalDebt();
   const lb = leaveBalance();
@@ -15471,7 +15476,7 @@ function renderNetWorth(){
     // For past years: count all
     // For future years: count all (projected)
     if(mYrNum < curYr || (mYrNum === curYr && mMoIdx <= curMoIdx) || mYrNum > curYr){
-      ytdSaved += (mt_nw[m]||{net:0}).net;
+      ytdSaved += (mt_nw[m]||{netTotal:0}).netTotal;
     }
   });
 
@@ -15510,7 +15515,7 @@ function renderNetWorth(){
     const isPast = mYrNum < curYr || (mYrNum === curYr && mMoIdx <= curMoIdx);
     const isFutureYear = mYrNum > curYr;
 
-    cumSav += (mt_nw[m]||{net:0}).net;
+    cumSav += (mt_nw[m]||{netTotal:0}).netTotal;
     const val = +cumSav.toFixed(2);
 
     cumLabels.push(m.split(' ')[0].slice(0,3) + (activeYear==='all' ? ` '${String(myr).slice(2)}` : ''));
