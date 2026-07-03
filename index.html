@@ -51,32 +51,6 @@ html {
   font-size: clamp(12px, 0.694vw + 9.5px, 16px);
 }
 /* All rem-based sizing now auto-scales with resolution and zoom */
-[data-theme="midnight"] {
-  --bg: #050810;
-  --surface: #0a0f1a;
-  --surface2: #111827;
-  --surface3: #182030;
-  --border: #1e2a3e;
-  --border2: #2a3a55;
-  --accent: #00e5b0;
-  --accent2: #3b9eff;
-  --accent3: #fbbf24;
-  --accent4: #c084fc;
-  --danger: #ff4d6d;
-  --warn: #fb923c;
-  --text: #e8eef8;
-  --text2: #8899b8;
-  --text3: #3d5070;
-  --surplus: #34d399;
-  --deficit: #f87171;
-  --glass: rgba(10,15,26,0.85);
-  --glow: 0 0 28px rgba(var(--accent-rgb),0.18);
-  --glow2: 0 0 28px rgba(var(--accent2-rgb),0.18);
-  --gradient: linear-gradient(135deg, #00e5b0, #3b9eff);
-  --accent-rgb: 0,229,176;
-  --accent2-rgb: 59,158,255;
-  --accent3-rgb: 251,191,36;
-}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
 /* Mobile: allow body to be full-height without overflow issues */
@@ -92,7 +66,7 @@ body::before{
   background-image:url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAMAAAAp4XiDAAAAUVBMVEWFhYWDg4N3d3dtbW17e3t1dXWBgYGHh4t5eXlzc3OLi4ubm5uVlZWPj4+NjY19fX2JiYl/f39ra2uRkZGZmZlpaWmXl5dvb29xcXGTk5NnZ2c8TV1mAAAAG3RSTlNAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEAvEOwtAAAFVklEQVR4XpWWB67c2BUFb3g557T/hRo9/WUMZHlgr4Bgqi3iIygqi1YIGkOVLGJlMApFZ64kqNaJEFbBBsACeiKDcqRqiKpYSBrFEDfNr8lgHhOiHWlyGa2RGYMU5q3CWqIbDwP0aPnDKrIJO0B55Fy7zggC/f");
   opacity:0.025;pointer-events:none;z-index:9999;display:none
 }
-[data-theme="midnight"] body::before,[data-theme="cyberpunk"] body::before,[data-theme="aurora"] body::before{display:block}
+
 
 /* SIDEBAR */
 #sidebar{
@@ -531,59 +505,6 @@ tr:hover td{background:var(--surface2)}
 .nw-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace}
 
 
-/* ─── THEME ENGINE ─────────────────────────────────────────────────────────── */
-[data-theme="cyberpunk"] {
-  --bg: #00040f;
-  --surface: #050d1a;
-  --surface2: #0a1628;
-  --surface3: #0f2040;
-  --border: #1a3a6b;
-  --border2: #2a5aab;
-  --accent: #00f0ff;
-  --accent2: #ff00aa;
-  --accent3: #ffee00;
-  --danger: #ff3355;
-  --warn: #ff8800;
-  --text: #c8e8ff;
-  --text2: #5a9abf;
-  --text3: #2a4a6b;
-  --surplus: #00ff88;
-  --deficit: #ff3355;
-  --glass: rgba(0,20,50,0.8);
-  --glow: 0 0 30px rgba(0,240,255,0.25);
-  --accent-rgb: 0,240,255;
-  --accent2-rgb: 255,0,170;
-  --accent3-rgb: 255,238,0;
-}
-
-
-[data-theme="aurora"] {
-  --bg: #0d0a1e;
-  --surface: #130e2a;
-  --surface2: #1a1438;
-  --surface3: #221b4a;
-  --border: #2d2260;
-  --border2: #3d3080;
-  --accent: #a78bfa;
-  --accent2: #38bdf8;
-  --accent3: #fb7185;
-  --accent4: #34d399;
-  --danger: #f43f5e;
-  --warn: #f97316;
-  --text: #ede9fe;
-  --text2: #8b7ec8;
-  --text3: #4a3d80;
-  --surplus: #34d399;
-  --deficit: #f43f5e;
-  --glass: rgba(13,10,30,0.85);
-  --glow: 0 0 28px rgba(167,139,250,0.2);
-  --gradient: linear-gradient(135deg, #a78bfa, #38bdf8);
-  --accent-rgb: 167,139,250;
-  --accent2-rgb: 56,189,248;
-  --accent3-rgb: 251,113,133;
-}
-
-
 /* ─── PROFILE SYSTEM ──────────────────────────────────────────────────────── */
 #profileScreen {
   position: fixed; inset: 0; z-index: 99998;
@@ -738,18 +659,6 @@ tr:hover td{background:var(--surface2)}
   font-family: 'DM Mono', monospace; transition: all 0.15s;
 }
 .currency-btn.active { background: var(--accent); color: #000; }
-
-/* ─── THEME SWITCHER ───────────────────────────────────────────────────────── */
-.theme-switcher { display: flex; gap: 6px; align-items: center; }
-.theme-btn {
-  width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--border2);
-  cursor: pointer; transition: all 0.15s; position: relative;
-}
-.theme-btn:hover, .theme-btn.active { border-color: var(--accent); transform: scale(1.15); }
-.theme-btn[data-t="midnight"] { background: radial-gradient(circle, #050810, #00e5b0); }
-.theme-btn[data-t="cyberpunk"] { background: radial-gradient(circle, #00040f, #00f0ff); }
-.theme-btn[data-t="aurora"] { background: radial-gradient(circle, #0d0a1e, #a78bfa); }
-.theme-btn[data-t="light"] { background: radial-gradient(circle, #ffffff, #007aff); }
 
 /* ─── NEW KPI TILES ────────────────────────────────────────────────────────── */
 .kpi-tile.glow-tile { animation: tileGlow 3s ease-in-out infinite alternate; }
@@ -1088,6 +997,34 @@ canvas.sparkline { width: 100% !important; height: 36px !important; }
   border: 1px solid var(--border);
 }
 .perf-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--surplus); animation: pulseGlow 2s ease-in-out infinite; }
+
+/* ── Compact Bank/Wallet pill (lives next to the live clock in the topbar) ── */
+.bw-pill {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text2);
+  padding: 4px 10px; background: var(--surface2); border-radius: 6px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.bw-pill .bw-item { display: flex; align-items: center; gap: 4px; }
+.bw-pill .bw-item .bw-ico { font-size: 12px; line-height: 1; }
+.bw-pill .bw-item .bw-val { font-weight: 700; }
+.bw-pill .bw-val.positive { color: var(--surplus); }
+.bw-pill .bw-val.negative { color: var(--deficit); }
+.bw-pill .bw-sep { width: 1px; height: 12px; background: var(--border2); }
+.bw-pill .bw-move-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 5px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border2); color: var(--text2);
+  font-size: 11px; transition: background 0.15s, color 0.15s;
+}
+.bw-pill .bw-move-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.bw-pill .bw-setup-btn {
+  background: none; border: none; color: var(--accent); cursor: pointer;
+  font-family: 'DM Mono', monospace; font-size: 11px; text-decoration: underline;
+  padding: 0;
+}
+@media (max-width: 900px) { .bw-pill { display: none; } }
 
 /* ── Salary simulator ── */
 .sim-card { background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; position: relative; overflow: hidden; }
@@ -1685,7 +1622,6 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
 .hcal-nav-btn { min-height: 40px; min-width: 40px; }
 .year-btn { min-height: 36px; }
 .currency-btn { min-height: 36px; }
-.theme-btn { min-height: 36px; min-width: 36px; }
 
 /* ── Button active feedback (native-feel press) ── */
 .btn-primary:active, .btn-save:active { transform: scale(0.97); opacity: 0.9; }
@@ -1735,7 +1671,6 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
   .topbar-right { flex-shrink: 0; gap: 6px !important; }
   /* Hide secondary topbar elements on very small screens */
   .year-badge { display: none !important; }
-  .theme-switcher { display: none !important; }
   .currency-toggle { display: none !important; }
 }
 
@@ -2944,13 +2879,7 @@ window._fbHandleEmailSubmit = function() {
     <div class="topbar-right">
       <div id="_cloudSyncPill" title="Cloud sync status"></div>
       <div class="live-clock" id="liveClock">12:43:24</div>
-      <div class="perf-indicator"><div class="perf-dot"></div><span id="monthPerfLabel" style="color: var(--surplus);">All Years: +13,962 MAD</span></div>
-      <div class="theme-switcher">
-        <div class="theme-btn" data-t="midnight" onclick="setTheme('midnight')" title="Midnight"></div>
-        <div class="theme-btn" data-t="cyberpunk" onclick="setTheme('cyberpunk')" title="Cyberpunk Blue"></div>
-        <div class="theme-btn" data-t="aurora" onclick="setTheme('aurora')" title="Aurora Purple"></div>
-        <div class="theme-btn active" data-t="light" onclick="setTheme('light')" title="Minimalist Light"></div>
-      </div>
+      <div class="bw-pill" id="bankWalletPanel"></div>
       <div class="currency-toggle">
         <button class="currency-btn active" data-cur="MAD" onclick="setCurrency('MAD')">MAD</button>
         <button class="currency-btn" data-cur="EUR" onclick="setCurrency('EUR')">EUR</button>
@@ -2972,7 +2901,6 @@ window._fbHandleEmailSubmit = function() {
 
   <!-- DASHBOARD -->
   <div class="content" id="page-dashboard">
-    <div class="kpi-grid" id="bankWalletPanel" style="margin-bottom:20px"></div>
     <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-tile" style="--tile-color:var(--surplus)">
       <div class="kpi-label">Total Income</div>
@@ -11727,6 +11655,12 @@ window._fbHandleEmailSubmit = function() {
 <div class="toast show" id="toast"></div>
 
 <script>
+// ─── BANK / WALLET BALANCE — method lists (hoisted to top so they're always
+// initialized before initApp()'s synchronous first render/auth callback can
+// reach getBankWalletBalance / renderBankWalletPanel) ───────────────────────
+const _WALLET_METHODS = ['💵 Cash'];
+const _BANK_METHODS   = ['🏦 Transfer', '💳 Card', '📱 Mobile Pay'];
+
 // ─── DATA SCHEMA ───────────────────────────────────────────────────────────────
 const DEFAULTS = {
   transactions: [],
@@ -12657,6 +12591,7 @@ function renderPage(p){
   // Always refresh currency rates from DB before rendering any page
   loadCurrencyFromDB();
   updatePerfIndicator();
+  renderBankWalletPanel();
   const r = {
     dashboard:renderDashboard, budget:renderBudget, monthly:renderMonthly,
     bonus:renderBonus, income:renderIncome, savings:renderSavings,
@@ -12853,6 +12788,7 @@ function trueActiveSubs(){
 let cashChart, catChart;
 function renderDashboard(){
   updatePerfIndicator();
+  renderBankWalletPanel();
   const today = new Date();
   const yearLabel = activeYear === 'all' ? 'All Years' : String(activeYear);
   const isAllYears = activeYear === 'all';
@@ -18569,6 +18505,7 @@ function enterApp() {
   repopulateMonthSelects();
   renderPage(currentPage);
   updatePerfIndicator();
+  renderBankWalletPanel();
   toast('Welcome, ' + activeProfileName + ' ✓');
 }
 
@@ -19060,6 +18997,7 @@ function cpFinishOnboarding(){
     repopulateMonthSelects();
     renderPage(currentPage);
     updatePerfIndicator();
+  renderBankWalletPanel();
     if (typeof _renderFirebaseSidebarBadge === 'function') _renderFirebaseSidebarBadge(fbUser);
     // Register session after onboarding completes
     if (window._fbRegisterSession) window._fbRegisterSession(fbUser.uid).catch(()=>{});
@@ -19267,6 +19205,7 @@ window._onFirebaseUser = async function(user) {
   repopulateMonthSelects();
   renderPage(currentPage);
   updatePerfIndicator();
+  renderBankWalletPanel();
   // Add Google account info to sidebar bottom
   _renderFirebaseSidebarBadge(user);
   // Mark current month as seen so the rollover runs correctly on future visits
@@ -20198,27 +20137,23 @@ function _xlsxDateStr(val) {
 }
 
 // ─── THEME ENGINE ─────────────────────────────────────────────────────────────
+// Only the light (white) theme is available now — force it regardless of any
+// theme previously saved in DB.settings from before this was simplified.
 let currentTheme = 'light';
 
 function loadThemeFromDB() {
-  currentTheme = (DB.settings && DB.settings.theme) || 'light';
-  applyTheme(currentTheme);
+  currentTheme = 'light';
+  if (DB.settings) DB.settings.theme = 'light';
+  applyTheme('light');
 }
 
 function applyTheme(t) {
-  const body = document.body;
-  body.removeAttribute('data-theme');
-  if (t !== 'light') body.setAttribute('data-theme', t);
-  document.querySelectorAll('.theme-btn').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+  document.body.removeAttribute('data-theme');
 }
 
 function setTheme(t) {
-  currentTheme = t;
-  DB.settings.theme = t;
-  saveDB();
-  applyTheme(t);
-  // Re-render current page so all charts repaint with new theme colors
-  renderPage(currentPage);
+  // No-op: theme switching has been removed, app is always light.
+  applyTheme('light');
 }
 
 // ─── CURRENCY CONVERTER ───────────────────────────────────────────────────────
@@ -23930,8 +23865,9 @@ function _getAllTransactions() {
 // ─── BANK / WALLET BALANCE ──────────────────────────────────────────────────
 // Wallet methods = cash-in-hand. Bank methods = anything that lands in a bank
 // account (transfer, card, mobile pay all settle to the bank in real life).
-const _WALLET_METHODS = ['💵 Cash'];
-const _BANK_METHODS   = ['🏦 Transfer', '💳 Card', '📱 Mobile Pay'];
+// (_WALLET_METHODS / _BANK_METHODS are now declared near the top of this
+// script — see just after DEFAULTS — so they're initialized before initApp's
+// synchronous first render/auth callback can ever reach them.)
 
 // One-time setup: everything that happened before "now" collapses into a single
 // historical net figure that becomes the starting Bank balance. Wallet starts at 0.
@@ -23994,33 +23930,20 @@ function renderBankWalletPanel(){
   if (!el) return;
   const cfg = DB.balanceConfig || {};
   if (!cfg.enabled) {
-    el.innerHTML = `
-      <div class="kpi-tile" style="--tile-color:var(--accent);grid-column:span 2;display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div>
-          <div class="kpi-label">🏦 Bank &amp; Wallet Balance</div>
-          <div class="kpi-sub" style="margin-top:4px">Not set up yet — everything before today rolls into Bank, Wallet starts at 0.</div>
-        </div>
-        <button class="btn-primary" onclick="setupBankWalletTracking()" style="white-space:nowrap">Set Up Tracking</button>
-      </div>`;
+    el.innerHTML = `<button class="bw-setup-btn" onclick="setupBankWalletTracking()" title="Everything before today rolls into Bank, Wallet starts at 0">Set up Bank/Wallet</button>`;
     return;
   }
   const b = getBankWalletBalance();
   el.innerHTML = `
-    <div class="kpi-tile" style="--tile-color:var(--accent)">
-      <div class="kpi-label">🏦 Bank Balance</div>
-      <div class="kpi-value ${b.bank>=0?'positive':'negative'}">${fmtC(b.bank)}</div>
-      <div class="kpi-sub">Transfer · Card · Mobile Pay</div>
-      <div class="kpi-icon">🏦</div>
+    <div class="bw-item" title="Transfer · Card · Mobile Pay">
+      <span class="bw-ico">🏦</span><span class="bw-val ${b.bank>=0?'positive':'negative'}">${fmtC(b.bank)}</span>
     </div>
-    <div class="kpi-tile" style="--tile-color:var(--accent3)">
-      <div class="kpi-label">💵 Wallet Balance</div>
-      <div class="kpi-value ${b.wallet>=0?'positive':'negative'}">${fmtC(b.wallet)}</div>
-      <div class="kpi-sub">Cash on hand</div>
-      <div class="kpi-icon">💵</div>
+    <div class="bw-sep"></div>
+    <div class="bw-item" title="Cash on hand">
+      <span class="bw-ico">💵</span><span class="bw-val ${b.wallet>=0?'positive':'negative'}">${fmtC(b.wallet)}</span>
     </div>
-    <div class="kpi-tile" style="--tile-color:var(--accent2);display:flex;align-items:center;justify-content:center">
-      <button class="btn-primary" onclick="openMoveMoneyModal()">💱 Move Money</button>
-    </div>`;
+    <div class="bw-sep"></div>
+    <button class="bw-move-btn" onclick="openMoveMoneyModal()" title="Move Money">💱</button>`;
 }
 
 // ── Move Money (Bank ⇄ Wallet transfers, e.g. ATM withdrawals) ──────────────
