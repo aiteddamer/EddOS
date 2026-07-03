@@ -10843,6 +10843,23 @@ window._fbHandleEmailSubmit = function() {
   </div>
 </div>
 
+<div class="modal-overlay" id="pmPickModal">
+  <div class="modal" style="width:min(360px,92vw)">
+    <div class="modal-header">
+      <span>Select Payment Method</span>
+      <button class="modal-close" onclick="closeModal('pmPickModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px" id="pmPickGrid">
+        <button type="button" class="pm-pick-btn" data-method="🏦 Transfer" onclick="_choosePaymentMethod('🏦 Transfer')" style="padding:16px 8px;font-size:14px;font-weight:600;border-radius:8px;border:1px solid var(--border2);background:var(--surface2, transparent);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif">🏦 Transfer</button>
+        <button type="button" class="pm-pick-btn" data-method="💳 Card" onclick="_choosePaymentMethod('💳 Card')" style="padding:16px 8px;font-size:14px;font-weight:600;border-radius:8px;border:1px solid var(--border2);background:var(--surface2, transparent);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif">💳 Card</button>
+        <button type="button" class="pm-pick-btn" data-method="💵 Cash" onclick="_choosePaymentMethod('💵 Cash')" style="padding:16px 8px;font-size:14px;font-weight:600;border-radius:8px;border:1px solid var(--border2);background:var(--surface2, transparent);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif">💵 Cash</button>
+        <button type="button" class="pm-pick-btn" data-method="📱 Mobile Pay" onclick="_choosePaymentMethod('📱 Mobile Pay')" style="padding:16px 8px;font-size:14px;font-weight:600;border-radius:8px;border:1px solid var(--border2);background:var(--surface2, transparent);color:var(--text);cursor:pointer;font-family:'DM Sans',sans-serif">📱 Mobile Pay</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="goalModal">
   <div class="modal" style="width:min(640px,94vw)">
     <div class="modal-header"><span id="goalModalTitle">Add Goal</span><button class="modal-close" onclick="closeModal('goalModal')">✕</button></div>
@@ -16959,17 +16976,43 @@ function saveTransaction(){
   const date = document.getElementById('tx_date').value;
   if (!date) { toast('⚠️ Please select a date'); return; }
 
-  // ── Confirm Payment Method before saving ────────────────────────────────
-  // Payment Method silently defaults to 🏦 Transfer if never touched, and it
-  // drives the Bank/Wallet split — an unnoticed wrong value here quietly
-  // throws off the balance. One quick confirm catches that before it's saved.
-  const methodEl = document.getElementById('tx_method');
-  const selectedMethod = methodEl ? methodEl.value : '';
-  if (!confirm(`Confirm Payment Method: ${selectedMethod}\n\nClick Cancel to go back and change it.`)) {
-    if (methodEl) methodEl.focus();
+  // ── Amount (MAD) is required ────────────────────────────────────────────
+  const amountRaw = document.getElementById('tx_amount').value;
+  const amountVal = evalAmount(amountRaw);
+  if (!amountRaw || !amountRaw.trim() || !isFinite(amountVal) || amountVal <= 0) {
+    toast('⚠️ Amount (MAD) is required');
+    document.getElementById('tx_amount').focus();
     return;
   }
 
+  // ── Prompt Payment Method (all 4 options at once) before saving ────────
+  // Payment Method drives the Bank/Wallet split — an unnoticed wrong value
+  // here quietly throws off the balance, so we make the user actively pick
+  // one every time instead of silently trusting whatever the dropdown was
+  // last left on.
+  _openPaymentMethodPrompt();
+}
+
+function _openPaymentMethodPrompt(){
+  const methodEl = document.getElementById('tx_method');
+  const current = methodEl ? methodEl.value : '';
+  document.querySelectorAll('#pmPickGrid .pm-pick-btn').forEach(btn => {
+    const isCurrent = btn.getAttribute('data-method') === current;
+    btn.style.borderColor = isCurrent ? 'var(--accent)' : 'var(--border2)';
+    btn.style.boxShadow = isCurrent ? '0 0 0 1px var(--accent) inset' : 'none';
+  });
+  openModal('pmPickModal');
+}
+
+function _choosePaymentMethod(method){
+  const methodEl = document.getElementById('tx_method');
+  if (methodEl) methodEl.value = method;
+  closeModal('pmPickModal');
+  _completeSaveTransaction();
+}
+
+function _completeSaveTransaction(){
+  const date = document.getElementById('tx_date').value;
   const d = new Date(date);
   const txYear = d.getFullYear();
   const month = MO_NAMES[d.getMonth()] + ' ' + txYear;
