@@ -1089,6 +1089,34 @@ canvas.sparkline { width: 100% !important; height: 36px !important; }
 }
 .perf-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--surplus); animation: pulseGlow 2s ease-in-out infinite; }
 
+/* ── Compact Bank/Wallet pill (lives next to the live clock in the topbar) ── */
+.bw-pill {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text2);
+  padding: 4px 10px; background: var(--surface2); border-radius: 6px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+.bw-pill .bw-item { display: flex; align-items: center; gap: 4px; }
+.bw-pill .bw-item .bw-ico { font-size: 12px; line-height: 1; }
+.bw-pill .bw-item .bw-val { font-weight: 700; }
+.bw-pill .bw-val.positive { color: var(--surplus); }
+.bw-pill .bw-val.negative { color: var(--deficit); }
+.bw-pill .bw-sep { width: 1px; height: 12px; background: var(--border2); }
+.bw-pill .bw-move-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 5px; cursor: pointer;
+  background: transparent; border: 1px solid var(--border2); color: var(--text2);
+  font-size: 11px; transition: background 0.15s, color 0.15s;
+}
+.bw-pill .bw-move-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.bw-pill .bw-setup-btn {
+  background: none; border: none; color: var(--accent); cursor: pointer;
+  font-family: 'DM Mono', monospace; font-size: 11px; text-decoration: underline;
+  padding: 0;
+}
+@media (max-width: 900px) { .bw-pill { display: none; } }
+
 /* ── Salary simulator ── */
 .sim-card { background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); padding: 20px; margin-bottom: 20px; position: relative; overflow: hidden; }
 .sim-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background: var(--gradient); }
@@ -2944,7 +2972,7 @@ window._fbHandleEmailSubmit = function() {
     <div class="topbar-right">
       <div id="_cloudSyncPill" title="Cloud sync status"></div>
       <div class="live-clock" id="liveClock">12:43:24</div>
-      <div class="perf-indicator"><div class="perf-dot"></div><span id="monthPerfLabel" style="color: var(--surplus);">All Years: +13,962 MAD</span></div>
+      <div class="bw-pill" id="bankWalletPanel"></div>
       <div class="theme-switcher">
         <div class="theme-btn" data-t="midnight" onclick="setTheme('midnight')" title="Midnight"></div>
         <div class="theme-btn" data-t="cyberpunk" onclick="setTheme('cyberpunk')" title="Cyberpunk Blue"></div>
@@ -2972,7 +3000,6 @@ window._fbHandleEmailSubmit = function() {
 
   <!-- DASHBOARD -->
   <div class="content" id="page-dashboard">
-    <div class="kpi-grid" id="bankWalletPanel" style="margin-bottom:20px"></div>
     <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-tile" style="--tile-color:var(--surplus)">
       <div class="kpi-label">Total Income</div>
@@ -12657,6 +12684,7 @@ function renderPage(p){
   // Always refresh currency rates from DB before rendering any page
   loadCurrencyFromDB();
   updatePerfIndicator();
+  renderBankWalletPanel();
   const r = {
     dashboard:renderDashboard, budget:renderBudget, monthly:renderMonthly,
     bonus:renderBonus, income:renderIncome, savings:renderSavings,
@@ -12853,6 +12881,7 @@ function trueActiveSubs(){
 let cashChart, catChart;
 function renderDashboard(){
   updatePerfIndicator();
+  renderBankWalletPanel();
   const today = new Date();
   const yearLabel = activeYear === 'all' ? 'All Years' : String(activeYear);
   const isAllYears = activeYear === 'all';
@@ -18569,6 +18598,7 @@ function enterApp() {
   repopulateMonthSelects();
   renderPage(currentPage);
   updatePerfIndicator();
+  renderBankWalletPanel();
   toast('Welcome, ' + activeProfileName + ' ✓');
 }
 
@@ -19060,6 +19090,7 @@ function cpFinishOnboarding(){
     repopulateMonthSelects();
     renderPage(currentPage);
     updatePerfIndicator();
+  renderBankWalletPanel();
     if (typeof _renderFirebaseSidebarBadge === 'function') _renderFirebaseSidebarBadge(fbUser);
     // Register session after onboarding completes
     if (window._fbRegisterSession) window._fbRegisterSession(fbUser.uid).catch(()=>{});
@@ -19267,6 +19298,7 @@ window._onFirebaseUser = async function(user) {
   repopulateMonthSelects();
   renderPage(currentPage);
   updatePerfIndicator();
+  renderBankWalletPanel();
   // Add Google account info to sidebar bottom
   _renderFirebaseSidebarBadge(user);
   // Mark current month as seen so the rollover runs correctly on future visits
@@ -23994,33 +24026,20 @@ function renderBankWalletPanel(){
   if (!el) return;
   const cfg = DB.balanceConfig || {};
   if (!cfg.enabled) {
-    el.innerHTML = `
-      <div class="kpi-tile" style="--tile-color:var(--accent);grid-column:span 2;display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div>
-          <div class="kpi-label">🏦 Bank &amp; Wallet Balance</div>
-          <div class="kpi-sub" style="margin-top:4px">Not set up yet — everything before today rolls into Bank, Wallet starts at 0.</div>
-        </div>
-        <button class="btn-primary" onclick="setupBankWalletTracking()" style="white-space:nowrap">Set Up Tracking</button>
-      </div>`;
+    el.innerHTML = `<button class="bw-setup-btn" onclick="setupBankWalletTracking()" title="Everything before today rolls into Bank, Wallet starts at 0">Set up Bank/Wallet</button>`;
     return;
   }
   const b = getBankWalletBalance();
   el.innerHTML = `
-    <div class="kpi-tile" style="--tile-color:var(--accent)">
-      <div class="kpi-label">🏦 Bank Balance</div>
-      <div class="kpi-value ${b.bank>=0?'positive':'negative'}">${fmtC(b.bank)}</div>
-      <div class="kpi-sub">Transfer · Card · Mobile Pay</div>
-      <div class="kpi-icon">🏦</div>
+    <div class="bw-item" title="Transfer · Card · Mobile Pay">
+      <span class="bw-ico">🏦</span><span class="bw-val ${b.bank>=0?'positive':'negative'}">${fmtC(b.bank)}</span>
     </div>
-    <div class="kpi-tile" style="--tile-color:var(--accent3)">
-      <div class="kpi-label">💵 Wallet Balance</div>
-      <div class="kpi-value ${b.wallet>=0?'positive':'negative'}">${fmtC(b.wallet)}</div>
-      <div class="kpi-sub">Cash on hand</div>
-      <div class="kpi-icon">💵</div>
+    <div class="bw-sep"></div>
+    <div class="bw-item" title="Cash on hand">
+      <span class="bw-ico">💵</span><span class="bw-val ${b.wallet>=0?'positive':'negative'}">${fmtC(b.wallet)}</span>
     </div>
-    <div class="kpi-tile" style="--tile-color:var(--accent2);display:flex;align-items:center;justify-content:center">
-      <button class="btn-primary" onclick="openMoveMoneyModal()">💱 Move Money</button>
-    </div>`;
+    <div class="bw-sep"></div>
+    <button class="bw-move-btn" onclick="openMoveMoneyModal()" title="Move Money">💱</button>`;
 }
 
 // ── Move Money (Bank ⇄ Wallet transfers, e.g. ATM withdrawals) ──────────────
