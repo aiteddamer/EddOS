@@ -2972,6 +2972,7 @@ window._fbHandleEmailSubmit = function() {
 
   <!-- DASHBOARD -->
   <div class="content" id="page-dashboard">
+    <div class="kpi-grid" id="bankWalletPanel" style="margin-bottom:20px"></div>
     <div class="kpi-grid" id="kpiGrid">
     <div class="kpi-tile" style="--tile-color:var(--surplus)">
       <div class="kpi-label">Total Income</div>
@@ -10797,6 +10798,46 @@ window._fbHandleEmailSubmit = function() {
   </div>
 </div>
 
+<div class="modal-overlay" id="moveMoneyModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span>💱 Move Money</span>
+      <button class="modal-close" onclick="closeModal('moveMoneyModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Direction</label>
+          <select class="form-input" id="moveMoney_direction">
+            <option value="bank_to_wallet">🏦 → 💵 Bank to Wallet (e.g. ATM withdrawal)</option>
+            <option value="wallet_to_bank">💵 → 🏦 Wallet to Bank (e.g. cash deposit)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          <input class="form-input" type="date" id="moveMoney_date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Amount (MAD)</label>
+          <input class="form-input" type="number" id="moveMoney_amount" placeholder="e.g. 2000">
+        </div>
+        <div class="form-group full">
+          <label class="form-label">Note (optional)</label>
+          <input class="form-input" id="moveMoney_note" placeholder="e.g. ATM withdrawal for groceries">
+        </div>
+      </div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div class="form-label" style="margin-bottom:8px">Recent Moves</div>
+        <div id="moneyTransferLog"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModal('moveMoneyModal')">Close</button>
+      <button class="btn-primary" onclick="saveMoneyTransfer()">Record Move</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="txModal">
   <div class="modal">
     <div class="modal-header">
@@ -11714,7 +11755,14 @@ const DEFAULTS = {
     leaveMode: 'B', leaveStart: '', leaveYear: new Date().getFullYear(), leaveCustomRate: 0,
     theme: 'light', currency: 'MAD', fxUSD: 0.1, fxEUR: 0.093,
     islamicHolidays: {}  // keyed by year, value: array of {date, name, confirmed}
-  }
+  },
+  // ── Bank / Wallet balance tracking ──────────────────────────────────────
+  // enabled=false until the user runs the one-time setup. anchorDate marks the
+  // cutover: everything dated before it is rolled into Bank as a single
+  // historical net figure (computed live, so edits/deletes to old tx still
+  // self-correct it); everything from anchorDate onward is split by method.
+  balanceConfig: { enabled: false, anchorDate: null },
+  moneyTransfers: []
 };
 
 // ─── IN-MEMORY STORAGE (no localStorage) ──────────────────────────────────────
@@ -11722,7 +11770,7 @@ const DEFAULTS = {
 // To persist: use "Export File" which downloads a new HTML with data embedded.
 
 const YEAR_KEYS = ['transactions','bonusEntries','bonusMonths','bonusTypes','leaveEntries','goals','assets','loans','learning','habits','habitLog','monthBudgets','deletedIncomeIds','savingsSettings','incomeEntries'];
-const CONFIG_KEYS = ['incomeSources','friends','settings','careerPositions','careerEvolutions','subscriptions','recurringTemplates','wishlist'];
+const CONFIG_KEYS = ['incomeSources','friends','settings','careerPositions','careerEvolutions','subscriptions','recurringTemplates','wishlist','balanceConfig','moneyTransfers'];
 
 // FILE_DATA is injected by export — empty on fresh file
 // Format: { userName, userEmoji, userPin, years: { "2026": {...yearKeys} }, config: {...configKeys} }
@@ -11885,6 +11933,8 @@ function loadDB() {
   if (!DB.incomeEntries) DB.incomeEntries = [];
   if (!DB.recurringTemplates) DB.recurringTemplates = [];
   if (!DB.wishlist) DB.wishlist = [];
+  if (!DB.balanceConfig) DB.balanceConfig = { enabled: false, anchorDate: null };
+  if (!DB.moneyTransfers) DB.moneyTransfers = [];
   if (DB.incomeSources) DB.incomeSources.forEach(s => { if (!s.company) s.company = ''; if (!s.position) s.position = ''; });
 
   // ── Auto-activate Upcoming income sources whose effectiveFrom month has arrived ──
@@ -12891,6 +12941,8 @@ function renderDashboard(){
       { label:'Net Worth',         val:fmtC(nw),       sub:`Assets: ${fmtC(totalAssets)} · Saved: ${fmtC(cumSaved)} · Debt: ${fmtC(td)}`,   icon:'📈', color:nw>=0?'var(--accent)':'var(--deficit)',    cls:nw>0?'positive':'negative' },
     ];
   }
+
+  renderBankWalletPanel();
 
   const g = document.getElementById('kpiGrid');
   g.innerHTML = kpis.map(k=>`
@@ -23873,6 +23925,164 @@ function _getAllTransactions() {
     Object.values(_mirror.years).forEach(yd => { (yd.transactions || []).forEach(push); });
   }
   return all;
+}
+
+// ─── BANK / WALLET BALANCE ──────────────────────────────────────────────────
+// Wallet methods = cash-in-hand. Bank methods = anything that lands in a bank
+// account (transfer, card, mobile pay all settle to the bank in real life).
+const _WALLET_METHODS = ['💵 Cash'];
+const _BANK_METHODS   = ['🏦 Transfer', '💳 Card', '📱 Mobile Pay'];
+
+// One-time setup: everything that happened before "now" collapses into a single
+// historical net figure that becomes the starting Bank balance. Wallet starts at 0.
+// From this moment on, every new/edited transaction is split by its Payment Method.
+function setupBankWalletTracking(){
+  if (DB.balanceConfig && DB.balanceConfig.enabled) {
+    toast('Bank/Wallet tracking is already set up ✓');
+    return;
+  }
+  const today = new Date();
+  const anchorDate = today.toISOString().slice(0,10);
+  DB.balanceConfig = { enabled: true, anchorDate };
+  saveDB();
+  toast('🏦 Bank/Wallet tracking enabled — starting today ✓');
+  renderPage(currentPage);
+}
+
+// Fully derived from the transaction list + transfer log — nothing is stored as a
+// running counter, so adding/editing/deleting a transaction (old or new) always
+// self-corrects the balance automatically, no manual reconciliation needed.
+function getBankWalletBalance(){
+  const cfg = DB.balanceConfig || {};
+  if (!cfg.enabled || !cfg.anchorDate) return null;
+
+  const allTx = _getAllTransactions();
+  let historical = 0;   // net of everything before the anchor date — rolls into Bank
+  let bankPost = 0, walletPost = 0;
+
+  allTx.forEach(t => {
+    if (!t.date || !t.type) return;
+    const amt = +t.amount || 0;
+    const sign = t.type === '💰 Income' ? 1 : (t.type === '💸 Expense' ? -1 : 0);
+    if (!sign) return;
+    if (t.date < cfg.anchorDate) {
+      historical += sign * amt;
+    } else if (_WALLET_METHODS.includes(t.method)) {
+      walletPost += sign * amt;
+    } else {
+      // Bank methods, plus any unrecognized/legacy method, default to Bank.
+      bankPost += sign * amt;
+    }
+  });
+
+  let transferBank = 0, transferWallet = 0;
+  (DB.moneyTransfers || []).forEach(tr => {
+    const amt = +tr.amount || 0;
+    if (tr.direction === 'bank_to_wallet') { transferBank -= amt; transferWallet += amt; }
+    else if (tr.direction === 'wallet_to_bank') { transferWallet -= amt; transferBank += amt; }
+  });
+
+  return {
+    bank: historical + bankPost + transferBank,
+    wallet: 0 + walletPost + transferWallet,
+    anchorDate: cfg.anchorDate
+  };
+}
+
+function renderBankWalletPanel(){
+  const el = document.getElementById('bankWalletPanel');
+  if (!el) return;
+  const cfg = DB.balanceConfig || {};
+  if (!cfg.enabled) {
+    el.innerHTML = `
+      <div class="kpi-tile" style="--tile-color:var(--accent);grid-column:span 2;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div class="kpi-label">🏦 Bank &amp; Wallet Balance</div>
+          <div class="kpi-sub" style="margin-top:4px">Not set up yet — everything before today rolls into Bank, Wallet starts at 0.</div>
+        </div>
+        <button class="btn-primary" onclick="setupBankWalletTracking()" style="white-space:nowrap">Set Up Tracking</button>
+      </div>`;
+    return;
+  }
+  const b = getBankWalletBalance();
+  el.innerHTML = `
+    <div class="kpi-tile" style="--tile-color:var(--accent)">
+      <div class="kpi-label">🏦 Bank Balance</div>
+      <div class="kpi-value ${b.bank>=0?'positive':'negative'}">${fmtC(b.bank)}</div>
+      <div class="kpi-sub">Transfer · Card · Mobile Pay</div>
+      <div class="kpi-icon">🏦</div>
+    </div>
+    <div class="kpi-tile" style="--tile-color:var(--accent3)">
+      <div class="kpi-label">💵 Wallet Balance</div>
+      <div class="kpi-value ${b.wallet>=0?'positive':'negative'}">${fmtC(b.wallet)}</div>
+      <div class="kpi-sub">Cash on hand</div>
+      <div class="kpi-icon">💵</div>
+    </div>
+    <div class="kpi-tile" style="--tile-color:var(--accent2);display:flex;align-items:center;justify-content:center">
+      <button class="btn-primary" onclick="openMoveMoneyModal()">💱 Move Money</button>
+    </div>`;
+}
+
+// ── Move Money (Bank ⇄ Wallet transfers, e.g. ATM withdrawals) ──────────────
+// Kept OUT of the transaction ledger on purpose — it's not income or spending,
+// just cash moving from one place you keep it to another. Tracked separately
+// so it never touches income/expense/savings-rate calculations.
+function openMoveMoneyModal(){
+  document.getElementById('moveMoney_direction').value = 'bank_to_wallet';
+  document.getElementById('moveMoney_amount').value = '';
+  document.getElementById('moveMoney_date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('moveMoney_note').value = '';
+  renderMoneyTransferLog();
+  openModal('moveMoneyModal');
+}
+
+function saveMoneyTransfer(){
+  const amount = +document.getElementById('moveMoney_amount').value || 0;
+  if (amount <= 0) { toast('⚠️ Enter an amount'); return; }
+  const tr = {
+    id: Date.now(),
+    date: document.getElementById('moveMoney_date').value || new Date().toISOString().slice(0,10),
+    direction: document.getElementById('moveMoney_direction').value,
+    amount,
+    note: document.getElementById('moveMoney_note').value || ''
+  };
+  if (!DB.moneyTransfers) DB.moneyTransfers = [];
+  DB.moneyTransfers.push(tr);
+  saveDB();
+  toast('💱 Move recorded ✓');
+  document.getElementById('moveMoney_amount').value = '';
+  document.getElementById('moveMoney_note').value = '';
+  renderMoneyTransferLog();
+  renderBankWalletPanel();
+}
+
+function deleteMoneyTransfer(id){
+  DB.moneyTransfers = (DB.moneyTransfers || []).filter(t => t.id !== id);
+  saveDB();
+  toast('Move deleted ✓');
+  renderMoneyTransferLog();
+  renderBankWalletPanel();
+}
+
+function renderMoneyTransferLog(){
+  const el = document.getElementById('moneyTransferLog');
+  if (!el) return;
+  const list = (DB.moneyTransfers || []).slice().sort((a,b) => (b.date||'').localeCompare(a.date||'') || b.id - a.id);
+  if (!list.length) {
+    el.innerHTML = `<div style="color:var(--text3);font-size:12px;padding:8px 0">No moves recorded yet.</div>`;
+    return;
+  }
+  el.innerHTML = list.map(t => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <div>
+        <div>${t.direction === 'bank_to_wallet' ? '🏦 → 💵 Bank to Wallet' : '💵 → 🏦 Wallet to Bank'}</div>
+        <div style="color:var(--text3);font-size:11px">${t.date}${t.note ? ' · ' + t.note : ''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-family:'DM Mono',monospace">${fmtC(t.amount)}</span>
+        <button onclick="deleteMoneyTransfer(${t.id})" style="background:none;border:1px solid var(--border2);color:var(--danger);cursor:pointer;font-size:10px;padding:2px 8px;border-radius:4px">✕</button>
+      </div>
+    </div>`).join('');
 }
 const _origOpenAddModal = window.openAddModal;
 window.openAddModal = function() {
