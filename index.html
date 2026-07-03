@@ -12807,7 +12807,12 @@ function renderDashboard(){
   const yearExp = totalExpenses();
   const yearSav = totalSavings();
   const yearNet = yearInc - yearExp - yearSav;
-  const sr = yearInc > 0 ? yearNet / yearInc : 0;
+  // Savings Rate = share of income NOT spent — i.e. money moved to savings
+  // PLUS leftover unallocated cash. (Previously this subtracted yearSav from
+  // the numerator, which meant money you actually saved dragged the rate
+  // DOWN instead of counting toward it — backwards. Now: (Income-Expenses)/Income,
+  // which is mathematically the same as (yearSav + yearNet)/yearInc.)
+  const sr = yearInc > 0 ? (yearInc - yearExp) / yearInc : 0;
 
   // ── Month income & expenses for the "view month" (single-year mode) ──
   const mt = getMonthTotals();
@@ -12832,7 +12837,11 @@ function renderDashboard(){
       const yInc = DB.transactions.filter(t=>t.type==='💰 Income'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
       const yExp = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
       const ySav = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category==='💰 Savings'&&new Date(t.date).getFullYear()===yr).reduce((a,t)=>a+(+t.amount||0),0);
-      return { yr, inc: yInc, exp: yExp, sav: ySav, net: yInc - yExp - ySav };
+      // net = everything not spent this year = money moved to savings + leftover unallocated cash
+      const yNet = yInc - yExp;
+      const yLeftover = yInc - yExp - ySav;
+      const ySr = yInc > 0 ? yNet / yInc : 0;
+      return { yr, inc: yInc, exp: yExp, sav: ySav, leftover: yLeftover, net: yNet, sr: ySr };
     });
   }
 
@@ -12852,7 +12861,7 @@ function renderDashboard(){
       { label:'Total Income',        val:fmtC(yearInc),           sub:`Across ${numYears} year${numYears>1?'s':''} · avg ${fmtC(yearInc/numYears)}/yr`,    icon:'💰', color:'var(--surplus)',  cls:'positive' },
       { label:'Total Expenses',      val:fmtC(yearExp),           sub:`Across ${numYears} year${numYears>1?'s':''} · avg ${fmtC(yearExp/numYears)}/yr`,    icon:'💸', color:'var(--deficit)',  cls:'negative' },
       { label:'Total Net Saved',     val:fmtC(yearNet),           sub:`All-years income minus expenses`,                                                    icon:'⚖️', color:yearNet>=0?'var(--surplus)':'var(--deficit)', cls:yearNet>=0?'positive':'negative' },
-      { label:'Overall Savings Rate',val:pct(sr),                 sub:`Net saved: ${fmtC(yearNet)}`,                                                        icon:'📊', color:sr>=0?'var(--surplus)':'var(--deficit)',  cls:sr>=0?'positive':'negative' },
+      { label:'Overall Savings Rate',val:pct(sr),                 sub:`Saved: ${fmtC(yearSav)} · Leftover: ${fmtC(yearNet)}`,                                                        icon:'📊', color:sr>=0?'var(--surplus)':'var(--deficit)',  cls:sr>=0?'positive':'negative' },
       { label:'Avg Monthly Expenses',val:fmtC(avgMonthExp),       sub:`Based on ${numYears * 12} months of data`,                                           icon:'🔥', color:'var(--warn)',     cls:'' },
       { label:'Total Saving',        val:fmtC(yearSav),           sub:`Across ${numYears} year${numYears>1?'s':''} · avg ${fmtC(yearSav/numYears)}/yr`,    icon:'💰', color:'var(--accent3)', cls:'' },
       { label:'Avg Monthly Net',     val:fmtC(avgMonthNet),       sub:`Avg income/mo: ${fmtC(yearInc/(numYears*12))}`,                                      icon:'🔭', color:avgMonthNet>=0?'var(--surplus)':'var(--deficit)', cls:avgMonthNet>=0?'positive':'negative' },
@@ -12867,7 +12876,7 @@ function renderDashboard(){
       { label:`${monthLabel} Income`,   val:fmtC(curInc),   sub:`${yearLabel} total: ${fmtC(yearInc)}`,                                    icon:'💰', color:'var(--surplus)',                          cls:'positive' },
       { label:`${monthLabel} Expenses`, val:fmtC(curExp),   sub:`${yearLabel} total: ${fmtC(yearExp)}`,                                    icon:'💸', color:'var(--deficit)',                           cls:'negative' },
       { label:`${monthLabel} Net`,      val:fmtC(curNet),   sub:`Income − Expenses · ${yearLabel} net: ${fmtC(yearNet)}`,                  icon:'⚖️', color:curNet>=0?'var(--surplus)':'var(--deficit)', cls:curNet>=0?'positive':'negative' },
-      { label:`${yearLabel} Savings Rate`, val:pct(sr),     sub:`Net saved: ${fmtC(yearNet)}`,                                             icon:'📊', color:sr>=0?'var(--surplus)':'var(--deficit)',  cls:sr>=0?'positive':'negative' },
+      { label:`${yearLabel} Savings Rate`, val:pct(sr),     sub:`Saved: ${fmtC(yearSav)} · Leftover: ${fmtC(yearNet)}`,                                             icon:'📊', color:sr>=0?'var(--surplus)':'var(--deficit)',  cls:sr>=0?'positive':'negative' },
       { label: isCurrentYear ? 'Daily Burn Rate' : `${yearLabel} Avg/Month`, val: isCurrentYear ? fmtC(dailyBurn) : fmtC(yearExp/12), sub: isCurrentYear ? `${today.getDate()} days elapsed this month` : `Avg monthly expenses ${yearLabel}`, icon:'🔥', color:'var(--warn)', cls:'' },
       { label:'Total Saving',      val:fmtC(yearSav),  sub:`${yearLabel} total moved to savings`,                           icon:'💰', color:'var(--accent3)',                          cls:'' },
       { label:'Total Debt',        val:fmtC(td),       sub:`${DB.loans.filter(l=>l.name).length} active loans`,             icon:'💳', color:'var(--danger)',                           cls:td>0?'negative':'' },
