@@ -16853,7 +16853,10 @@ function openAddModal(){
   if (amtPreview) amtPreview.textContent = '';
 
   // ── Determine best default date ───────────────────────────────────────────
-  let defaultDate = new Date().toISOString().split('T')[0];
+  const today = new Date();
+  let defaultDate = today.toISOString().split('T')[0];
+  let needsDayPrompt = false; // true when we can't confidently default to "today"
+
   const monthFilter = document.getElementById('budgetMonthFilter');
   const filteredMonth = monthFilter ? monthFilter.value : '';
   if (filteredMonth) {
@@ -16861,15 +16864,25 @@ function openAddModal(){
     const moIdx = MO_NAMES.indexOf(parts[0]);
     const yr = parseInt(parts[1], 10);
     if (moIdx >= 0 && !isNaN(yr)) {
-      const mm = String(moIdx + 1).padStart(2, '0');
-      defaultDate = yr + '-' + mm + '-01';
+      const isCurrentMonth = (yr === today.getFullYear() && moIdx === today.getMonth());
+      if (isCurrentMonth) {
+        // Viewing the current month → just use today's actual date
+        defaultDate = today.toISOString().split('T')[0];
+      } else {
+        // Viewing a past (or future) month → don't assume the 1st, ask the user
+        const mm = String(moIdx + 1).padStart(2, '0');
+        defaultDate = yr + '-' + mm + '-01';
+        needsDayPrompt = true;
+      }
     }
   } else if (activeYear !== 'all') {
-    const today = new Date();
     const yr = +activeYear;
-    defaultDate = (today.getFullYear() === yr)
-      ? today.toISOString().split('T')[0]
-      : yr + '-01-01';
+    if (today.getFullYear() === yr) {
+      defaultDate = today.toISOString().split('T')[0];
+    } else {
+      defaultDate = yr + '-01-01';
+      needsDayPrompt = true;
+    }
   }
   document.getElementById('tx_date').value = defaultDate;
 
@@ -16877,6 +16890,18 @@ function openAddModal(){
   const dl = document.getElementById('friendList');
   dl.innerHTML = DB.friends.map(f=>'<option value="' + f.name + '">').join('');
   openModal('txModal');
+
+  // ── If viewing a past/future month, prompt the user to pick the exact day ──
+  if (needsDayPrompt) {
+    setTimeout(() => {
+      const dateInput = document.getElementById('tx_date');
+      if (!dateInput) return;
+      dateInput.focus();
+      if (typeof dateInput.showPicker === 'function') {
+        try { dateInput.showPicker(); } catch (e) { /* some browsers restrict showPicker(); ignore */ }
+      }
+    }, 150);
+  }
 }
 
 function updateTxCats(){
