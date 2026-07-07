@@ -12493,8 +12493,11 @@ function buildAllYearsDB() {
     _mergeById(merged.learning,           yd.learning);
     _mergeById(merged.habits,             yd.habits);
     _mergeById(merged.bonusTypes,         yd.bonusTypes);
-    // recurringTemplates is now a CONFIG_KEY — already loaded above, not per-year
-    _mergeById(merged.wishlist,           yd.wishlist);
+    // recurringTemplates and wishlist are now CONFIG_KEYs — already loaded above,
+    // not per-year. Do NOT re-merge yd.wishlist here: it can resurrect stale
+    // per-year copies (e.g. left over from before the migration, or items already
+    // deleted from config) into the "All Years" view even though they're gone
+    // everywhere else.
 
     // Object merges (later year wins for monthBudgets; habitLog is date-keyed)
     if (yd.habitLog)     Object.assign(merged.habitLog, yd.habitLog);
