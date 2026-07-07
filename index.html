@@ -16344,12 +16344,36 @@ function renderFriends(){
 
   const friends = DB.friends;
 
+  // ── Carry-forward: when a specific year is selected, DB.transactions only contains
+  // that year's entries. A loan made in an earlier year (e.g. 2025) and repaid in the
+  // selected year (e.g. 2026) would otherwise look like the friend overpaid. To fix this,
+  // we auto-compute the net balance from every year BEFORE the selected one (pulled from
+  // the per-year buckets already saved in localStorage) and carry it forward as the
+  // "opening balance" for the selected year. 'All' view already merges every year's
+  // transactions into DB.transactions, so no carry-forward is needed there.
+  function carriedBalanceFor(name){
+    if (activeYear === 'all') return 0;
+    const selYr = +activeYear;
+    const years = (typeof getAvailableYears === 'function' ? getAvailableYears() : [])
+      .filter(y => y < selYr);
+    let net = 0;
+    years.forEach(y => {
+      const yd = (_mirror.years && _mirror.years[y]) ? _mirror.years[y] : {};
+      const yTxs = (yd.transactions || []).filter(t => t.friendTag === name);
+      const yLoaned = yTxs.filter(t=>t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
+      const yPaid   = yTxs.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
+      net += yLoaned - yPaid;
+    });
+    return net;
+  }
+
   function calcFriend(name){
     const txs = DB.transactions.filter(t=>t.friendTag===name);
     const loaned   = txs.filter(t=>t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
     const paid     = txs.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    const prior    = DB.friends.find(f=>f.name===name)?.priorBalance||0;
-    return { loaned, paid, prior, owes: loaned + prior - paid, txs };
+    const priorManual = DB.friends.find(f=>f.name===name)?.priorBalance||0;
+    const carried  = priorManual + carriedBalanceFor(name);
+    return { loaned, paid, prior: carried, owes: loaned + carried - paid, txs };
   }
 
   const calcs = friends.map(f => ({ f, ...calcFriend(f.name) }));
@@ -16399,9 +16423,10 @@ function renderFriends(){
         </div>`;
       }).join('');
 
+    const priorLabel = activeYear === 'all' ? 'Prior balance' : `Carried into ${activeYear}`;
     const priorRow = prior !== 0 ? `<div style="display:grid;grid-template-columns:90px 1fr auto auto;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;background:var(--surface3);border:1px dashed var(--border2);margin-bottom:4px">
       <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--text3)">${f.dateAdded||'—'}</span>
-      <span style="font-size:12px;color:var(--text2)">Prior balance</span>
+      <span style="font-size:12px;color:var(--text2)">${priorLabel}</span>
       <span class="tag tag-hold" style="font-size:9px;padding:1px 7px;border-radius:10px">prior</span>
       <span style="font-size:12px;font-family:'DM Mono',monospace;color:var(--warn);font-weight:700">${prior>0?'+':''}${fmtC(prior)}</span>
     </div>` : '';
