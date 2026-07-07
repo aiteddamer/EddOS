@@ -26023,7 +26023,24 @@ function markWishlistPurchased(id) {
 
 function renderWishlist() {
   if (!DB.wishlist) DB.wishlist = [];
-  const items = DB.wishlist;
+  let items = DB.wishlist;
+
+  // ── Scope to the active year tab, same as every other page ──────────────
+  // Wishlist items live in CONFIG (global) storage rather than a per-year bucket,
+  // so they don't naturally split by year on their own — filter them here instead.
+  // A purchased item is shown under the year it was actually bought; an item
+  // still being saved for is shown under the year it was added to the wishlist.
+  // "All Years" (activeYear === 'all') shows everything, unfiltered.
+  if (activeYear !== 'all') {
+    const yr = +activeYear;
+    items = items.filter(i => {
+      const dateStr = (i.status === 'purchased' && i.purchaseDate) ? i.purchaseDate : i.createdAt;
+      if (!dateStr) return true; // no date info to go on — don't hide it silently
+      const d = new Date(dateStr);
+      return !isNaN(d) && d.getFullYear() === yr;
+    });
+  }
+
   const filter = document.getElementById('wishlistFilter')?.value || 'all';
 
   // KPIs
