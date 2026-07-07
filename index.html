@@ -11740,10 +11740,10 @@ if (FILE_ID === 'default') {
 const LS_KEY = 'lifeOS_' + FILE_ID;
 
 // ── Load data for THIS file ──────────────────────────────────────────────────
-// FILE_DATA is embedded in this file at save/export time — it IS this file's data.
-// localStorage is shared across ALL local HTML files (same file:// origin in Chrome),
-// so it must NEVER override FILE_DATA. It is only used when FILE_DATA is null,
-// meaning this is the blank template that has never been exported yet.
+// FILE_DATA is embedded in this file at save/export time. localStorage (scoped by
+// LS_KEY/FILE_ID) holds this file's ongoing in-browser edits. localStorage wins
+// once it exists, since it's always more current than the export-time snapshot;
+// FILE_DATA is only used to seed a brand-new / just-reset localStorage entry.
 // ── Reset sentinel: resetToFresh() writes {__reset__:true} to localStorage.
 //    On next page load we detect it, boot blank, and clear the sentinel.
 let _lsRaw = null;
@@ -11755,11 +11755,19 @@ if (_wasReset) {
 }
 const _lsData = (_wasReset || !_lsRaw) ? null : _lsRaw;
 
-const _effectiveData = FILE_DATA || _lsData || null;
+// Prefer existing localStorage data for this file — it holds the latest in-session
+// edits (including deletions) made since the file was exported. Only fall back to
+// the embedded FILE_DATA snapshot when there's no localStorage entry yet for this
+// file (first-ever load of this export, or right after an explicit reset).
+// IMPORTANT: previously this checked FILE_DATA first on every load, which meant
+// FILE_DATA's stale snapshot was written back into localStorage on every refresh —
+// silently reviving anything deleted (e.g. wishlist items) after export.
+const _effectiveData = _lsData || FILE_DATA || null;
 
-// Always overwrite localStorage with THIS file's data on load so that in-session
-// saves (which write to localStorage under LS_KEY) stay scoped to this file.
-if (_effectiveData) {
+// Seed localStorage from FILE_DATA only the first time this file is opened
+// (no existing localStorage entry yet). Do NOT do this on every load, or every
+// refresh would wipe out changes made since the file was exported.
+if (!_lsData && _effectiveData) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(_effectiveData)); } catch(e) {}
 }
 
