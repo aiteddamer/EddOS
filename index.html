@@ -362,6 +362,7 @@ tr:hover td{background:var(--surface2)}
 .leave-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:16px;margin-bottom:24px}
 .leave-stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px 12px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80px}
 .leave-stat-val{font-family:'Syne',sans-serif;font-size:clamp(18px,2vw,28px);font-weight:800;color:var(--accent);line-height:1.1;word-break:break-word}
+.leave-stat-val.is-long{font-size:clamp(13px,1.6vw,16px)}
 .leave-stat-sub{font-size:10px;color:var(--text2);font-family:'DM Mono',monospace;margin-top:3px;line-height:1.3}
 .leave-stat-label{font-size:10px;color:var(--text3);margin-top:6px;text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace}
 
@@ -1864,6 +1865,7 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
   .leave-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
   .leave-stat { padding: 12px 8px; min-height: 70px; }
   .leave-stat-val { font-size: 20px !important; }
+  .leave-stat-val.is-long { font-size: 13px !important; }
 }
 
 /* ── Net worth grid: 2-col ── */
@@ -8911,7 +8913,7 @@ window._fbHandleEmailSubmit = function() {
   <!-- LEAVE -->
   <div class="content" id="page-leave">
     <!-- Leave Policy Settings moved to the dedicated ⚙️ Settings page -->
-    <div class="leave-grid" id="leaveStats"><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">2026</div><div class="leave-stat-sub">DATAPROTECT</div><div class="leave-stat-label">📆 Leave Year</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">19.5</div><div class="leave-stat-sub">13mo × 1.5 = 18d/yr</div><div class="leave-stat-label">✅ Total Accrued</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">5.5</div><div class="leave-stat-label">🏖️ This Year Congé</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">2.0</div><div class="leave-stat-sub">all-time at DATAPROTECT</div><div class="leave-stat-label">🌴 Balance</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">0</div><div class="leave-stat-label">🤒 Sick Days</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">1.5/mo</div><div class="leave-stat-sub">18d per full year</div><div class="leave-stat-label">⚙️ Accrual Rate</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:14px;">2025-03-13</div><div class="leave-stat-sub">DATAPROTECT</div><div class="leave-stat-label">🏢 Integration</div></div></div>
+    <div class="leave-grid" id="leaveStats"><div class="leave-stat"><div class="leave-stat-val">2026</div><div class="leave-stat-sub">DATAPROTECT</div><div class="leave-stat-label">📆 Leave Year</div></div><div class="leave-stat"><div class="leave-stat-val">19.5</div><div class="leave-stat-sub">13mo × 1.5 = 18d/yr</div><div class="leave-stat-label">✅ Total Accrued</div></div><div class="leave-stat"><div class="leave-stat-val">5.5</div><div class="leave-stat-label">🏖️ This Year Congé</div></div><div class="leave-stat"><div class="leave-stat-val">2.0</div><div class="leave-stat-sub">all-time at DATAPROTECT</div><div class="leave-stat-label">🌴 Balance</div></div><div class="leave-stat"><div class="leave-stat-val">0</div><div class="leave-stat-label">🤒 Sick Days</div></div><div class="leave-stat"><div class="leave-stat-val">1.5/mo</div><div class="leave-stat-sub">18d per full year</div><div class="leave-stat-label">⚙️ Accrual Rate</div></div><div class="leave-stat"><div class="leave-stat-val is-long">2025-03-13</div><div class="leave-stat-sub">DATAPROTECT</div><div class="leave-stat-label">🏢 Integration</div></div></div>
 
     <!-- Effective Days Panel -->
     <div class="settings-card" style="margin-bottom:16px">
@@ -9264,7 +9266,6 @@ window._fbHandleEmailSubmit = function() {
       <td class="amount-pos">0.5</td>
     </tr></tbody></table>
     </div>
-  </div>
 
     <!-- Islamic Holiday Confirmation Panel -->
     <div class="settings-card" style="margin-bottom:16px;padding:0;overflow:hidden" id="islamicHolidayPanel">
@@ -9370,6 +9371,7 @@ window._fbHandleEmailSubmit = function() {
   </div>
       </div>
     </div>
+  </div>
 
 
   <!-- SETTINGS -->
@@ -15886,8 +15888,8 @@ function renderLeave(){
     {label:'Accrual Rate',     val: accrual+'/mo',                      icon:'⚙️', sub: accrualLabel},
     {label:'Integration',      val: integStr,                           icon:'🏢', sub: company},
   ].map(({label,val,icon,sub})=>{
-    const valStyle = String(val).length > 8 ? ' style="font-size:14px"' : '';
-    return `<div class="leave-stat"><div class="leave-stat-val"${valStyle}>${val}</div>${sub?`<div class="leave-stat-sub">${sub}</div>`:''}<div class="leave-stat-label">${icon} ${label}</div></div>`;
+    const longCls = String(val).length > 8 ? ' is-long' : '';
+    return `<div class="leave-stat"><div class="leave-stat-val${longCls}">${val}</div>${sub?`<div class="leave-stat-sub">${sub}</div>`:''}<div class="leave-stat-label">${icon} ${label}</div></div>`;
   }).join('');
 
   // Calendar dot strip
