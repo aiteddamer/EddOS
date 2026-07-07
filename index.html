@@ -2815,6 +2815,8 @@ window._fbHandleEmailSubmit = function() {
   <div class="nav-item" onclick="typeof showPage==='function'&amp;&amp;showPage('learning')"><span class="icon">📚</span> Learning</div>
   <div class="nav-section">Analytics</div>
   <div class="nav-item" onclick="typeof showPage==='function'&amp;&amp;showPage('yearcompare')"><span class="icon">📊</span> Year Compare</div>
+  <div class="nav-section">System</div>
+  <div class="nav-item" onclick="typeof showPage==='function'&amp;&amp;showPage('settings')"><span class="icon">⚙️</span> Settings</div>
 
   </div>
   <div class="sidebar-bottom">
@@ -8908,50 +8910,7 @@ window._fbHandleEmailSubmit = function() {
 
   <!-- LEAVE -->
   <div class="content" id="page-leave">
-    <div class="settings-card">
-      <div class="settings-title">⚙️ Leave Policy Settings</div>
-      <div style="padding:10px 14px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.15);border-radius:8px;margin-bottom:14px" id="leavePolicyInfo"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:10px;background:rgba(var(--accent-rgb),0.12);color:var(--accent);padding:2px 8px;border-radius:10px;font-family:DM Mono,monospace;font-weight:700">Model B</span><span style="font-size:11px;color:var(--text2)">DATAPROTECT</span><span style="font-size:10px;color:var(--text3);font-family:DM Mono,monospace">Mon=1 · Tue=1 · Wed=1 · Thu=1 · Fri=1.5</span><span style="margin-left:auto;font-size:10px;color:var(--accent3)">⚙️ Accrual: 1.5/mo · 18d/yr full cycle</span></div></div>
-      <div class="settings-grid">
-        <div class="settings-group" style="grid-column:1/-1;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="flex:0 0 auto">
-            <div class="settings-label" style="margin-bottom:4px">Leave Year</div>
-            <input class="settings-input" id="leaveYear" type="number" style="width:110px" onchange="saveSetting('leaveYear',this.value);renderLeave()">
-          </div>
-          <div style="flex:1;min-width:0">
-            <div class="settings-label" style="margin-bottom:8px">View Balance For</div>
-            <div id="leavePositionPicker" style="display:flex;gap:8px;flex-wrap:wrap"><div onclick="selectLeavePosition('1777550802717')" style="
-      padding:10px 14px;border-radius:8px;cursor:pointer;transition:all 0.15s;
-      border:1.5px solid var(--border2);
-      background:var(--surface2);
-      box-shadow:none;
-      min-width:140px;
-    ">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-        <span style="font-size:13px;font-weight:700;color:var(--text);font-family:'Syne',sans-serif">DATAPROTECT</span>
-        <span style="font-size:9px;padding:1px 6px;border-radius:8px;background:rgba(52,211,153,0.15);color:var(--surplus);font-family:'DM Mono',monospace;font-weight:700">CURRENT</span>
-        
-      </div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:2px">Network Analyst</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">2025-03 → now · Model B</div>
-    </div><div onclick="selectLeavePosition('1777550843380')" style="
-      padding:10px 14px;border-radius:8px;cursor:pointer;transition:all 0.15s;
-      border:1.5px solid var(--border2);
-      background:var(--surface2);
-      box-shadow:none;
-      min-width:140px;
-    ">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-        <span style="font-size:13px;font-weight:700;color:var(--text);font-family:'Syne',sans-serif">Axians</span>
-        
-        
-      </div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace;margin-bottom:2px">IT Technician</div>
-      <div style="font-size:10px;color:var(--text3);font-family:'DM Mono',monospace">2024-12 → 2025-03 · Model A</div>
-    </div></div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <!-- Leave Policy Settings moved to the dedicated ⚙️ Settings page -->
     <div class="leave-grid" id="leaveStats"><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">2026</div><div class="leave-stat-sub">DATAPROTECT</div><div class="leave-stat-label">📆 Leave Year</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">19.5</div><div class="leave-stat-sub">13mo × 1.5 = 18d/yr</div><div class="leave-stat-label">✅ Total Accrued</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">5.5</div><div class="leave-stat-label">🏖️ This Year Congé</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">2.0</div><div class="leave-stat-sub">all-time at DATAPROTECT</div><div class="leave-stat-label">🌴 Balance</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">0</div><div class="leave-stat-label">🤒 Sick Days</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:;">1.5/mo</div><div class="leave-stat-sub">18d per full year</div><div class="leave-stat-label">⚙️ Accrual Rate</div></div><div class="leave-stat"><div class="leave-stat-val" style="font-size:14px;">2025-03-13</div><div class="leave-stat-sub">DATAPROTECT</div><div class="leave-stat-label">🏢 Integration</div></div></div>
 
     <!-- Islamic Holiday Confirmation Panel -->
@@ -9409,6 +9368,26 @@ window._fbHandleEmailSubmit = function() {
       <td class="amount-neu">0</td>
       <td class="amount-pos">0.5</td>
     </tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="content" id="page-settings">
+    <div class="settings-card">
+      <div class="settings-title">⚙️ Leave Policy Settings</div>
+      <div style="padding:10px 14px;background:rgba(var(--accent-rgb),0.05);border:1px solid rgba(var(--accent-rgb),0.15);border-radius:8px;margin-bottom:14px" id="leavePolicyInfo"></div>
+      <div class="settings-grid">
+        <div class="settings-group" style="grid-column:1/-1;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div style="flex:0 0 auto">
+            <div class="settings-label" style="margin-bottom:4px">Leave Year</div>
+            <input class="settings-input" id="leaveYear" type="number" style="width:110px" onchange="saveSetting('leaveYear',this.value);renderLeave()">
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="settings-label" style="margin-bottom:8px">View Balance For</div>
+            <div id="leavePositionPicker" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -12591,6 +12570,7 @@ const PAGE_META = {
   learning:{title:'📚 Learning Log',sub:'Books · Courses · Skills',btn:false},
   yearcompare:{title:'📊 Year Comparison',sub:'Multi-year financial analytics',btn:false},
   wishlist:{title:'🛒 Wishlist',sub:'Big purchases · Savings goals · Dream tracker',btn:false},
+  settings:{title:'⚙️ Settings',sub:'App-wide preferences & policies',btn:false},
 };
 let currentPage = 'dashboard';
 
@@ -12626,7 +12606,8 @@ function renderPage(p){
     credits:renderCredits, networth:renderNetWorth, leave:renderLeave,
     career:renderCareer,
     goals:renderGoals, friends:renderFriends, subs:renderSubs, learning:renderLearning,
-    yearcompare:renderYearCompare, recurring:renderRecurring, wishlist:renderWishlist
+    yearcompare:renderYearCompare, recurring:renderRecurring, wishlist:renderWishlist,
+    settings:renderLeave
   };
   if(r[p]) r[p]();
 }
@@ -15903,7 +15884,10 @@ function renderLeave(){
     {label:'Sick Days',        val: totalSickTaken,                     icon:'🤒', sub:''},
     {label:'Accrual Rate',     val: accrual+'/mo',                      icon:'⚙️', sub: accrualLabel},
     {label:'Integration',      val: integStr,                           icon:'🏢', sub: company},
-  ].map(({label,val,icon,sub})=>`<div class="leave-stat"><div class="leave-stat-val" style="font-size:${String(val).length>8?'14px':''};">${val}</div>${sub?`<div class="leave-stat-sub">${sub}</div>`:''}<div class="leave-stat-label">${icon} ${label}</div></div>`).join('');
+  ].map(({label,val,icon,sub})=>{
+    const valStyle = String(val).length > 8 ? ' style="font-size:14px"' : '';
+    return `<div class="leave-stat"><div class="leave-stat-val"${valStyle}>${val}</div>${sub?`<div class="leave-stat-sub">${sub}</div>`:''}<div class="leave-stat-label">${icon} ${label}</div></div>`;
+  }).join('');
 
   // Calendar dot strip
   const dotHtml = LEAVE_MONTHS.map((m, i) => {
