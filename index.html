@@ -10803,6 +10803,16 @@ window._fbHandleEmailSubmit = function() {
           <input class="form-input" id="tx_friend" placeholder="Friend name..." list="friendList">
           <datalist id="friendList"><option value="Abderrahim"></option><option value="Salah"></option><option value="Abdellatif"></option><option value="Idriss"></option><option value="Frero"></option></datalist>
         </div>
+        <!-- Savings direction — shown when category = 💰 Savings. Controls whether this
+             transaction ADDS to the savings pot or WITHDRAWS/spends from it. -->
+        <div class="form-group" id="tx_savings_dir_group" style="display: none;">
+          <label class="form-label">Savings Direction <span style="font-size:9px;color:var(--accent2);font-family:'DM Mono',monospace;background:rgba(var(--accent2-rgb),0.1);padding:1px 6px;border-radius:3px;margin-left:4px">SAVINGS</span></label>
+          <select class="form-input" id="tx_savings_dir">
+            <option value="add">➕ Add to Savings (set money aside)</option>
+            <option value="withdraw">➖ Withdraw from Savings (spend it, or move it back to your bank account)</option>
+          </select>
+          <div style="font-size:10px;color:var(--text3);margin-top:4px">Withdraw subtracts this amount from your saved total and adds it back to your main account balance — use it whether you're spending it or just transferring it back to your bank.</div>
+        </div>
         <!-- Bonus entry link — shown when category = 🎯 Bonus -->
         <div class="form-group full" id="tx_bonus_link_group" style="display: none;">
           <label class="form-label">Link to Bonus Entry <span style="font-size:9px;color:var(--accent3);font-family:'DM Mono',monospace;background:rgba(var(--accent3-rgb),0.1);padding:1px 6px;border-radius:3px;margin-left:4px">OPTIONAL</span></label>
@@ -13161,15 +13171,21 @@ function renderBudget(){
     return (b.id||0) - (a.id||0);
   }).map(t=>{
     const amt = +t.amount||0;
-    const cls = t.type==='💰 Income'?'amount-pos':'amount-neg';
+    // 💰 Savings transactions can be negative (a withdrawal/spend from the savings
+    // pot) — show them distinctly ("+" adding to savings, "−" withdrawing from it)
+    // instead of always prefixing "-", which would otherwise double up with the
+    // already-negative stored amount (e.g. "--500.00").
+    const isSavingsTx = t.category === '💰 Savings';
+    const cls = isSavingsTx ? (amt<0?'amount-pos':'amount-neg') : (t.type==='💰 Income'?'amount-pos':'amount-neg');
+    const amtSign = isSavingsTx ? (amt<0?'-':'+') : (t.type==='💸 Expense'?'-':'');
     const catOpts = (t.type==='💰 Income'?INCOME_CATS:EXPENSE_CATS).map(c=>`<option${c===t.category?' selected':''}>${c}</option>`).join('');
     const methodOpts = ['🏦 Transfer','💳 Card','💵 Cash','📱 Mobile Pay'].map(m=>`<option${m===t.method?' selected':''}>${m}</option>`).join('');
     return `<tr id="tx-row-${t.id}" class="tx-view-row">
       <td><span class="editable-cell" onclick="startEditTx(${t.id})">${t.date||''}</span></td>
-      <td><span class="tag ${t.type==='💰 Income'?'tag-income':'tag-expense'}" style="cursor:pointer" onclick="startEditTx(${t.id})">${t.type}</span></td>
+      <td><span class="tag ${t.type==='💰 Income'?'tag-income':'tag-expense'}" style="cursor:pointer" onclick="startEditTx(${t.id})">${t.type}${isSavingsTx&&amt<0?' <span style="font-size:9px;opacity:.8">(withdraw)</span>':''}</span></td>
       <td style="font-size:11px;color:var(--text3)">${t.month||''}</td>
       <td><span class="editable-cell" onclick="startEditTx(${t.id})">${t.category||''}</span></td>
-      <td class="${cls}" style="font-weight:700;font-family:'DM Mono',monospace"><span class="editable-cell" onclick="startEditTx(${t.id})">${t.type==='💸 Expense'?'-':''}${fmt(amt)}</span></td>
+      <td class="${cls}" style="font-weight:700;font-family:'DM Mono',monospace"><span class="editable-cell" onclick="startEditTx(${t.id})">${amtSign}${fmt(Math.abs(amt))}</span></td>
       <td><span class="editable-cell" onclick="startEditTx(${t.id})">${t.desc||'<span style="color:var(--text3);font-style:italic">—</span>'}</span></td>
       <td style="font-size:11px;color:var(--text2)">${t.method||''}</td>
       <td style="font-size:11px;color:var(--text3)">${t.tags||''}${t.manuallyEdited?` <span title="Manually overridden – won't be overwritten by auto-sync" style="background:rgba(var(--accent3-rgb),0.15);color:var(--accent3);padding:1px 5px;border-radius:3px;font-size:9px;font-family:'DM Mono',monospace;cursor:default">🔒 LOCKED</span>`:''}</td>
@@ -13207,6 +13223,9 @@ function startEditTx(id) {
   document.getElementById('tx_date').value = t.date || '';
   document.getElementById('tx_category').value = t.category || '';
   document.getElementById('tx_amount').value = Math.abs(t.amount) || '';
+  // Restore Savings Direction based on the stored sign (negative = withdrawal/spend)
+  const _savDirEl = document.getElementById('tx_savings_dir');
+  if (_savDirEl) _savDirEl.value = (t.category === '💰 Savings' && (+t.amount || 0) < 0) ? 'withdraw' : 'add';
   document.getElementById('tx_desc').value = t.desc || '';
   document.getElementById('tx_method').value = t.method || '🏦 Transfer';
   document.getElementById('tx_recurring').value = t.recurring || 'No';
@@ -16953,6 +16972,16 @@ function toggleFriendTag(){
     bonusGrp.style.display = isBonus ? '' : 'none';
     if(isBonus) populateBonusEntryDropdown();
   }
+
+  // Show Savings Direction picker when Expense > 💰 Savings — lets the user say
+  // whether this transaction is money going INTO savings or being WITHDRAWN/spent
+  // from savings (so it subtracts from the saved total instead of adding to it).
+  const isSavings = type==='💸 Expense' && cat==='💰 Savings';
+  const savDirGrp = document.getElementById('tx_savings_dir_group');
+  if(savDirGrp){
+    savDirGrp.style.display = isSavings ? '' : 'none';
+    if(!isSavings){ const d = document.getElementById('tx_savings_dir'); if(d) d.value = 'add'; }
+  }
 }
 
 function populateBonusEntryDropdown(){
@@ -17094,7 +17123,12 @@ function _completeSaveTransaction(){
       t.month = month;
       t.type = document.getElementById('tx_type').value;
       t.category = category;
-      t.amount = evalAmount(document.getElementById('tx_amount').value);
+      {
+        const _rawAmt = evalAmount(document.getElementById('tx_amount').value);
+        const _savDir = document.getElementById('tx_savings_dir');
+        const _isWithdraw = category === '💰 Savings' && _savDir && _savDir.value === 'withdraw';
+        t.amount = _isWithdraw ? -Math.abs(_rawAmt) : Math.abs(_rawAmt);
+      }
       t.desc = document.getElementById('tx_desc').value;
       t.method = document.getElementById('tx_method').value;
       t.recurring = document.getElementById('tx_recurring').value;
@@ -17178,12 +17212,19 @@ function _completeSaveTransaction(){
   }
 
   // ── ADD MODE (original) ───────────────────────────────────────────────────
+  const _txAmountRaw = evalAmount(document.getElementById('tx_amount').value);
+  const _txSavDir = document.getElementById('tx_savings_dir');
+  // Withdrawing/spending from Savings should SUBTRACT from the saved total rather
+  // than add to it — store the amount as negative so every place that sums
+  // 💰 Savings transactions (totalSavings, getMonthTotals, getCashSavingsLedger, etc.)
+  // nets it out correctly.
+  const _txIsSavingsWithdraw = category === '💰 Savings' && _txSavDir && _txSavDir.value === 'withdraw';
   const t = {
     id: Date.now(),
     date, month,
     type: document.getElementById('tx_type').value,
     category,
-    amount: evalAmount(document.getElementById('tx_amount').value),
+    amount: _txIsSavingsWithdraw ? -Math.abs(_txAmountRaw) : Math.abs(_txAmountRaw),
     desc: document.getElementById('tx_desc').value,
     method: document.getElementById('tx_method').value,
     recurring: document.getElementById('tx_recurring').value,
