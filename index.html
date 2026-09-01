@@ -21296,6 +21296,17 @@ function initApp() {
       try { runRecurringBackfill(t.id); } catch(e) {}
     });
   }
+  // ── Explicit persist + reload ───────────────────────────────────────────
+  // syncSubToLedger() (called individually above, not via syncAllSubsToLedger)
+  // only mutates _mirror/DB in memory — it never writes to localStorage on its
+  // own. Previously this "worked" only by accident, because runRecurringBackfill()
+  // happens to call saveDB() as a side effect right after. If a user has zero
+  // active recurring templates, that side effect never fires and every
+  // auto-generated subscription transaction is silently lost on refresh.
+  // Flushing here makes persistence unconditional, not a lucky accident of
+  // step ordering.
+  try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) { console.error('⚠️ Failed to persist auto-sync results:', e); }
+  if (activeYear === 'all') { DB = buildAllYearsDB(); } else { loadDB(); }
   // Open dashboard by default
   showPage('dashboard');
   // Render quick bar with user's saved pages
