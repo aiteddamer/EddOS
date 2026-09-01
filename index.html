@@ -11639,6 +11639,27 @@ window._fbHandleEmailSubmit = function() {
   </div>
 </div>
 
+<!-- MONTH-START LOGGING CHECK MODAL -->
+<div class="modal-overlay" id="monthCheckModal">
+  <div class="modal" style="width:min(480px,92vw)">
+    <div class="modal-header">
+      <span id="monthCheckTitle">📅 New Month Check</span>
+      <button class="modal-close" onclick="closeModal('monthCheckModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="padding:12px 14px;background:rgba(var(--accent2-rgb),0.08);border:1px solid rgba(var(--accent2-rgb),0.25);border-radius:8px;margin-bottom:14px">
+        <div style="font-size:12px;color:var(--text2);line-height:1.6" id="monthCheckMessage">
+          It looks like some of your income and/or expenses for this month haven't been logged yet.
+        </div>
+      </div>
+      <div id="monthCheckDetail" style="font-size:11px;color:var(--text3);font-family:'DM Mono',monospace;line-height:1.9;margin-bottom:4px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="dismissMonthCheck()">Not now</button>
+      <button class="btn-save" onclick="confirmMonthCheckGenerate()">⚡ Generate Now</button>
+    </div>
+  </div>
+</div>
 
 <!-- QUICK ADD BAR -->
 <div class="quick-add-bar" id="quickAddBar">
@@ -21417,6 +21438,94 @@ window._nmRolloverMarkSeen = function() {
     }, 1600); // After the existing 1400ms income auto-sync
   }
 })();
+
+// ─── MONTH-START LOGGING CHECK (ground-truth safety net) ────────────────────
+// The rollover block above decides whether to sync based on a "last seen
+// month" heuristic stored in localStorage — if that heuristic is wrong (e.g.
+// it was already stamped for this month, or a sync attempt threw partway
+// through), it will skip re-checking, and the user is left with a month that
+// silently has no income/expenses logged. This check ignores that heuristic
+// entirely and looks at the ACTUAL current data: if it's the current month
+// and there's still no income and/or no expected recurring expense logged,
+// it asks the user directly instead of assuming everything is fine.
+function checkCurrentMonthLogged() {
+  try {
+    const now = new Date();
+    const curMonth = MO_NAMES[now.getMonth()] + ' ' + now.getFullYear();
+    const curYr = now.getFullYear();
+
+    // Don't re-nag if the user already dismissed this exact month's check.
+    const dismissKey = LS_KEY + '__monthCheckDismissed';
+    let dismissedMonth = '';
+    try { dismissedMonth = localStorage.getItem(dismissKey) || ''; } catch(e) {}
+    if (dismissedMonth === curMonth) return;
+
+    // Ground-truth: read straight from the mirror for this year (source of truth),
+    // falling back to the active DB if that year isn't loaded yet.
+    let txs = [];
+    if (_mirror && _mirror.years && _mirror.years[curYr] && _mirror.years[curYr].transactions) {
+      txs = _mirror.years[curYr].transactions;
+    } else if (DB.transactions) {
+      txs = DB.transactions;
+    }
+    const monthTxs = txs.filter(t => t.month === curMonth);
+    const hasIncome = monthTxs.some(t => t.type === '💰 Income');
+    const hasExpense = monthTxs.some(t => t.type === '💸 Expense' && (t.tags === 'subscription' || t.tags === 'recurring-template'));
+
+    // Only worth asking if something was actually supposed to post this month.
+    const expectIncome = (DB.incomeSources || []).some(s =>
+      (s.status === 'Active' || s.status === 'Upcoming') && (+s.monthly > 0) &&
+      (s.freq || 'Monthly').trim() !== 'Variable'
+    );
+    const expectExpense = (DB.subscriptions || []).some(s => s.status !== 'Cancelled' && s.status !== 'Expired') ||
+      (DB.recurringTemplates || []).some(t => t.status === 'active' && t.fromMonth);
+
+    const missingIncome = expectIncome && !hasIncome;
+    const missingExpense = expectExpense && !hasExpense;
+    if (!missingIncome && !missingExpense) return; // nothing to flag
+
+    const parts = [];
+    if (missingIncome) parts.push('• No income transactions found yet for ' + curMonth);
+    if (missingExpense) parts.push('• No recurring/subscription expenses found yet for ' + curMonth);
+    const detailEl = document.getElementById('monthCheckDetail');
+    if (detailEl) detailEl.innerHTML = parts.join('<br>');
+    const msgEl = document.getElementById('monthCheckMessage');
+    if (msgEl) msgEl.textContent = `It's ${curMonth} and some of your usual transactions haven't shown up in the ledger yet. Generate them now?`;
+    if (typeof openModal === 'function') openModal('monthCheckModal');
+  } catch(e) {
+    console.error('⚠️ checkCurrentMonthLogged failed:', e);
+  }
+}
+
+function dismissMonthCheck() {
+  closeModal('monthCheckModal');
+  try {
+    const now = new Date();
+    const curMonth = MO_NAMES[now.getMonth()] + ' ' + now.getFullYear();
+    localStorage.setItem(LS_KEY + '__monthCheckDismissed', curMonth);
+  } catch(e) {}
+}
+
+function confirmMonthCheckGenerate() {
+  closeModal('monthCheckModal');
+  let ok = true;
+  try { syncAllIncomeSourcesToAllYears(); } catch(e) { ok = false; console.error(e); }
+  try { if (typeof autoCloseExpiredSubscriptions === 'function') autoCloseExpiredSubscriptions(); } catch(e) {}
+  try { (DB.subscriptions || []).forEach(s => { try { syncSubToLedger(s); } catch(e) {} }); } catch(e) {}
+  try {
+    (DB.recurringTemplates || []).filter(t => t.status === 'active' && t.fromMonth).forEach(t => {
+      try { runRecurringBackfill(t.id); } catch(e) {}
+    });
+  } catch(e) {}
+  try { localStorage.setItem(LS_KEY, JSON.stringify(_mirror)); } catch(e) {}
+  if (activeYear === 'all') { DB = buildAllYearsDB(); } else { loadDB(); }
+  toast(ok ? '⚡ Monthly transactions generated ✓' : '⚠️ Generated with some errors — check console');
+  renderPage(currentPage);
+}
+
+// Run after the rollover block has had a chance to auto-sync (1600ms above),
+// so this only surfaces the popup if things are STILL missing afterward.
+setTimeout(checkCurrentMonthLogged, 2200);
 
 
 // ─── YEAR COMPARE ────────────────────────────────────────────────────────────
