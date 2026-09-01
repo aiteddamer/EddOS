@@ -12078,6 +12078,7 @@ function syncAllIncomeSourcesToAllYears() {
   const curYrNum = activeYear === 'all' ? today.getFullYear() : +activeYear;
 
   sources.forEach(src => {
+   try {
     // Allow both Active AND Inactive sources (past jobs) to generate ledger entries,
     // as long as they have an effectiveFrom/effectiveTo date range and a salary.
     // Truly blank/unlinked sources with no date range are skipped.
@@ -12254,6 +12255,11 @@ function syncAllIncomeSourcesToAllYears() {
       });
 
     });
+   } catch(e) {
+     // A single malformed income source (bad date, corrupt field, etc.) must
+     // never block every source that comes after it in this loop.
+     console.error('⚠️ Skipping income source due to error:', (src && src.name) || src, e);
+   }
   });
 
   // Flush mirror to localStorage
@@ -21249,7 +21255,11 @@ function initApp() {
   // up-to-date without the user having to click "Sync to Ledger" manually.
   // This is safe: it only writes auto-generated transactions (tags='income-source')
   // and never overwrites manually-edited ones.
-  syncAllIncomeSourcesToAllYears();
+  // Wrapped in try/catch like every other sync step below — a single bad
+  // income-source record must never be able to abort the rest of initApp()
+  // (subscriptions, recurring templates, and the ledger reload all live after
+  // this call and would otherwise silently never run).
+  try { syncAllIncomeSourcesToAllYears(); } catch(e) { console.error('⚠️ syncAllIncomeSourcesToAllYears failed:', e); }
   // Auto-close any subscriptions whose cancellation date has already passed —
   // must run before the ledger sync below so cancelled subs stop generating new charges.
   if (typeof autoCloseExpiredSubscriptions === 'function') {
