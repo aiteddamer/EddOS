@@ -13220,13 +13220,14 @@ function renderBudget(){
     // instead of always prefixing "-", which would otherwise double up with the
     // already-negative stored amount (e.g. "--500.00").
     const isSavingsTx = t.category === '💰 Savings';
+    const isSavWithdraw = isSavingsTx && amt<0;   // money moved Savings -> your account (NOT an expense)
     const cls = isSavingsTx ? (amt<0?'amount-pos':'amount-neg') : (t.type==='💰 Income'?'amount-pos':'amount-neg');
-    const amtSign = isSavingsTx ? (amt<0?'-':'+') : (t.type==='💸 Expense'?'-':'');
+    const amtSign = isSavingsTx ? '+' : (t.type==='💸 Expense'?'-':'');
     const catOpts = (t.type==='💰 Income'?INCOME_CATS:EXPENSE_CATS).map(c=>`<option${c===t.category?' selected':''}>${c}</option>`).join('');
     const methodOpts = ['🏦 Transfer','💳 Card','💵 Cash','📱 Mobile Pay'].map(m=>`<option${m===t.method?' selected':''}>${m}</option>`).join('');
     return `<tr id="tx-row-${t.id}" class="tx-view-row">
       <td><span class="editable-cell" onclick="startEditTx(${t.id})">${t.date||''}</span></td>
-      <td><span class="tag ${t.type==='💰 Income'?'tag-income':'tag-expense'}" style="cursor:pointer" onclick="startEditTx(${t.id})">${t.type}${isSavingsTx&&amt<0?' <span style="font-size:9px;opacity:.8">(withdraw)</span>':''}</span></td>
+      <td><span class="tag ${(t.type==='💰 Income'||isSavWithdraw)?'tag-income':'tag-expense'}" style="cursor:pointer" onclick="startEditTx(${t.id})">${isSavWithdraw?'🏦 Savings → Account':(isSavingsTx?'🏦 To Savings':t.type)}</span></td>
       <td style="font-size:11px;color:var(--text3)">${t.month||''}</td>
       <td><span class="editable-cell" onclick="startEditTx(${t.id})">${t.category||''}</span></td>
       <td class="${cls}" style="font-weight:700;font-family:'DM Mono',monospace"><span class="editable-cell" onclick="startEditTx(${t.id})">${amtSign}${fmt(Math.abs(amt))}</span></td>
@@ -21689,7 +21690,7 @@ function initSimulator() {
   const avgMonthlyIncome = monthVals.length ? Math.round(monthVals.reduce((a,b)=>a+b,0)/monthVals.length) : 0;
 
   // Compute avg monthly expenses
-  const expenseTxs = DB.transactions.filter(t => t.type === '💸 Expense');
+  const expenseTxs = DB.transactions.filter(t => t.type === '💸 Expense' && t.category !== '💰 Savings');
   const byMonthExp = {};
   expenseTxs.forEach(t => { if(t.month) { byMonthExp[t.month] = (byMonthExp[t.month]||0) + (+t.amount||0); } });
   const monthExpVals = Object.values(byMonthExp);
@@ -24004,7 +24005,7 @@ function renderEnvelopes(filterMonth, gridId) {
   } else {
     // All years: use average monthly budget, scale by total number of months that have any transactions
     budgets = getAverageBudgetsAllYears();
-    const txMonths = new Set(DB.transactions.filter(t=>t.type==='💸 Expense').map(t=>t.month).filter(Boolean));
+    const txMonths = new Set(DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings').map(t=>t.month).filter(Boolean));
     budgetScale = Math.max(txMonths.size, 1);
     budgetSuffix = ' avg×' + budgetScale + 'mo';
     budgetLabel = 'All Years (avg monthly × ' + budgetScale + ' months)';
@@ -24102,7 +24103,7 @@ function updatePerfIndicator() {
   if (activeYear === 'all') {
     // All years: show total net across entire DB
     const inc = DB.transactions.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    const exp = DB.transactions.filter(t=>t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
+    const exp = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
     const net = inc - exp;
     el.textContent = `All Years: ${net>=0?'+':''}${fmt(net,0)} MAD`;
     el.style.color = net >= 0 ? 'var(--surplus)' : 'var(--deficit)';
@@ -24111,14 +24112,14 @@ function updatePerfIndicator() {
     const mo = MO_NAMES[today.getMonth()];
     const monthKey = mo + ' ' + activeYear;
     const inc = DB.transactions.filter(t=>t.month===monthKey&&t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    const exp = DB.transactions.filter(t=>t.month===monthKey&&t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
+    const exp = DB.transactions.filter(t=>t.month===monthKey&&t.type==='💸 Expense'&&t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
     const net = inc - exp;
     el.textContent = `${mo}: ${net>=0?'+':''}${fmt(net,0)} MAD`;
     el.style.color = net >= 0 ? 'var(--surplus)' : 'var(--deficit)';
   } else {
     // Past/future year: show full year net
     const inc = DB.transactions.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-    const exp = DB.transactions.filter(t=>t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
+    const exp = DB.transactions.filter(t=>t.type==='💸 Expense'&&t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
     const net = inc - exp;
     el.textContent = `${activeYear}: ${net>=0?'+':''}${fmt(net,0)} MAD`;
     el.style.color = net >= 0 ? 'var(--surplus)' : 'var(--deficit)';
