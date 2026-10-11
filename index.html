@@ -13183,9 +13183,8 @@ function renderBudget(){
   // are NOT spending — they're shown separately as "Saved (net)" so this total
   // matches the Dashboard's Expenses for the same month.
   const exp = txs.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
-  const savNet = txs.filter(t=>t.type==='💸 Expense' && t.category==='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
   document.getElementById('budgetKpis').innerHTML = [
-    ['Income','amount-pos',fmt(inc)+' MAD'],['Expenses','amount-neg',fmt(exp)+' MAD'],['Saved (net)',savNet>=0?'amount-pos':'amount-neg',fmt(savNet)+' MAD'],['Net',inc-exp>=0?'amount-pos':'amount-neg',fmt(inc-exp)+' MAD'],
+    ['Income','amount-pos',fmt(inc)+' MAD'],['Expenses','amount-neg',fmt(exp)+' MAD'],
   ].map(([l,c,v])=>`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 20px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">${l}</div><div class="${c}" style="font-size:18px;font-family:'Syne',sans-serif;font-weight:800;margin-top:4px">${v}</div></div>`).join('');
   // Helper: convert "Month YYYY" string to a sortable number (newest month = largest)
   function _monthToNum(m) {
@@ -16821,6 +16820,7 @@ function renderSubs(){
       </div>
       <span class="tag ${s.status.includes('Active')?'tag-active':s.status.includes('Cancelled')?'tag-hold':'tag-pending'}" style="margin-left:8px">${s.status}</span>
       <div style="display:flex;gap:4px;margin-left:8px">
+        <button onclick="syncOneSubToLedger(${s.id})" title="Add this subscription's charges to the Ledger" style="background:rgba(var(--accent2-rgb),0.1);border:1px solid rgba(var(--accent2-rgb),0.35);color:var(--accent2);cursor:pointer;font-size:11px;padding:3px 8px;border-radius:4px;font-weight:700">🔄 Sync</button>
         <button onclick="editSubInline(${s.id})" title="Edit" style="background:none;border:1px solid var(--border2);color:var(--text2);cursor:pointer;font-size:11px;padding:3px 8px;border-radius:4px;transition:all 0.12s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">✏️ Edit</button>
         <button onclick="deleteSub(${s.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:4px 8px" onmouseover="this.style.color='var(--deficit)'" onmouseout="this.style.color='var(--text3)'">✕</button>
       </div>
@@ -17747,6 +17747,29 @@ function subDailyCheck() {
 }
 setInterval(subDailyCheck, 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) subDailyCheck(); });
+
+// Sync ONE subscription to the ledger (button on each subscription card)
+function syncOneSubToLedger(id) {
+  const s = (DB.subscriptions || []).find(x => x.id === id);
+  if (!s) return;
+  if (!s.amount || +s.amount <= 0) { toast('⚠️ Set an amount first'); return; }
+  if (s.status !== '🟢 Active' && !s.cancelledOn) { toast('⚠️ Subscription is not active'); return; }
+  const countTx = () => {
+    let n = 0;
+    Object.values(_mirror.years || {}).forEach(yd => {
+      (yd.transactions || []).forEach(t => { if (t.subId === s.id) n++; });
+    });
+    return n;
+  };
+  const before = countTx();
+  syncSubToLedger(s);
+  saveDB();
+  const after = countTx();
+  renderSubs();
+  if (after === 0) toast('ℹ️ Nothing due yet — it will be added on its start date');
+  else if (after > before) toast(`✅ ${s.name}: ${after - before} charge${after - before > 1 ? 's' : ''} added to Ledger`);
+  else toast(`✅ ${s.name} is up to date in the Ledger (${after} charge${after > 1 ? 's' : ''})`);
+}
 
 // Sync all active subscriptions to ledger at once
 function syncAllSubsToLedger() {
