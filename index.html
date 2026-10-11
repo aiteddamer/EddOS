@@ -13198,19 +13198,20 @@ function renderBudget(){
     // 1️⃣ Sort by month (newest first — descending)
     const monthDiff = _monthToNum(b.month) - _monthToNum(a.month);
     if (monthDiff !== 0) return monthDiff;
-    // 2️⃣ Within the same month: auto-generated salary/income-source always last
-    const aIsSalary = (a.tags === 'income-source' || a.incomeSourceId) ? 1 : 0;
-    const bIsSalary = (b.tags === 'income-source' || b.incomeSourceId) ? 1 : 0;
-    if (aIsSalary !== bIsSalary) return aIsSalary - bIsSalary;
-    // 3️⃣ Within the same month: subscription/recurring auto-transactions always before salary but after manual
-    const aIsAuto = (a.tags === 'subscription' || a.tags === 'recurring-template' || a.subId) ? 1 : 0;
-    const bIsAuto = (b.tags === 'subscription' || b.tags === 'recurring-template' || b.subId) ? 1 : 0;
-    if (aIsAuto !== bIsAuto) return aIsAuto - bIsAuto; // manual (0) floats above auto (1)
-    // 4️⃣ Within same group: sort by actual date descending (newest date first, not insertion time)
+    // 2️⃣ Within the same month: true date order, newest date first
+    //    (so a subscription charged on the 11th sits above entries from the 1st/2nd)
     const dateA = a.date || '';
     const dateB = b.date || '';
     if (dateB !== dateA) return dateB.localeCompare(dateA);
-    // 5️⃣ Same date: stable order by id
+    // 3️⃣ Same date: auto-generated salary/income-source last
+    const aIsSalary = (a.tags === 'income-source' || a.incomeSourceId) ? 1 : 0;
+    const bIsSalary = (b.tags === 'income-source' || b.incomeSourceId) ? 1 : 0;
+    if (aIsSalary !== bIsSalary) return aIsSalary - bIsSalary;
+    // 4️⃣ Same date: manual entries above subscription/recurring auto-transactions
+    const aIsAuto = (a.tags === 'subscription' || a.tags === 'recurring-template' || a.subId) ? 1 : 0;
+    const bIsAuto = (b.tags === 'subscription' || b.tags === 'recurring-template' || b.subId) ? 1 : 0;
+    if (aIsAuto !== bIsAuto) return aIsAuto - bIsAuto;
+    // 5️⃣ Same date & group: newest entry first
     return (b.id||0) - (a.id||0);
   }).map(t=>{
     const amt = +t.amount||0;
@@ -17664,28 +17665,46 @@ function syncSubToLedger(s) {
   const pd = v => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v||''); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; };
   const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-  // First charge = the subscription's start date (or Jan 1 of this year if none).
-  // Free trials: first charge happens when the trial ends.
-  let first = pd(s.start) || new Date(today.getFullYear(), 0, 1);
+  const stepMonths = s.cycle === 'Annual' ? 12 : s.cycle === 'Quarterly' ? 3 : 1;
+  const addMonths = (d, m, day) => {
+    const t = new Date(d.getFullYear(), d.getMonth() + m, 1);
+    const dim = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+    return new Date(t.getFullYear(), t.getMonth(), Math.min(day, dim));
+  };
+
+  // ── Resolve the dates the user entered ──
+  let startD = pd(s.start);
+  const dueD = pd(s.due);
   if (s.tier === 'trial') {
     const te = pd(s.trialEnds);
-    if (te) first = te; else return; // trial with no end date -> nothing to charge yet
+    if (!te) return;            // trial with no end date -> nothing to charge yet
+    startD = te;                // first charge when the trial ends
   }
-  const anchorDay = first.getDate();
+  if (!startD) {
+    if (dueD) {
+      // No start date: use the renewal date as the anchor and begin at the most recent
+      // occurrence on/before today (never back-fill months we know nothing about).
+      let c = dueD, guard = 0;
+      while (c > today && guard++ < 600) c = addMonths(c, -stepMonths, dueD.getDate());
+      while (addMonths(c, stepMonths, dueD.getDate()) <= today && guard++ < 1200) c = addMonths(c, stepMonths, dueD.getDate());
+      startD = c;
+    } else {
+      startD = today;           // no dates at all -> starts today
+    }
+    s.start = fmt(startD);      // remember it so the charge dates stay stable
+  }
+  // Billing day-of-month: the renewal/due date's day if given, otherwise the start day
+  const billDay = dueD ? dueD.getDate() : startD.getDate();
 
   // Last charge date allowed = today, capped by cancellation date
   let last = today;
   const canc = pd(s.cancelledOn);
   if (canc && canc < last) last = canc;
 
-  const stepMonths = s.cycle === 'Annual' ? 12 : s.cycle === 'Quarterly' ? 3 : 1;
   let n = 0;
-
-  // Walk each billing date from start -> last (never in the future)
+  // Charge #0 is the start date itself; later charges follow the billing cycle on the billing day
   while (true) {
-    const target = new Date(first.getFullYear(), first.getMonth() + n * stepMonths, 1);
-    const dim = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
-    const chargeDate = new Date(target.getFullYear(), target.getMonth(), Math.min(anchorDay, dim));
+    const chargeDate = n === 0 ? startD : addMonths(startD, n * stepMonths, billDay);
     if (chargeDate > last) break;
     n++;
 
