@@ -12885,6 +12885,19 @@ function renderDashboard(){
   const cumSaved = getAllTimeCumulativeSavings();
   const nw = totalAssets + cumSaved - td;
 
+  // ── Savings added in the CURRENT calendar month (real today, any viewed year) ──
+  const _curMoKey = MO_NAMES[today.getMonth()] + ' ' + today.getFullYear();
+  const _savPool = (isAllYears || isCurrentYear)
+    ? (DB.transactions || [])
+    : ((_mirror.years && _mirror.years[today.getFullYear()] && _mirror.years[today.getFullYear()].transactions) || []);
+  let savAddedMonth = 0, savWithdrawnMonth = 0;
+  _savPool.forEach(t => {
+    if (t.type !== '💸 Expense' || t.category !== '💰 Savings' || t.month !== _curMoKey) return;
+    const a = +t.amount || 0;
+    if (a >= 0) savAddedMonth += a; else savWithdrawnMonth += -a;
+  });
+  const savMonthSub = `This month (${MO_NAMES[today.getMonth()].slice(0,3)}): +${fmtC(savAddedMonth)}` + (savWithdrawnMonth > 0 ? ` · −${fmtC(savWithdrawnMonth)} withdrawn` : '');
+
   // For "all years" mode, compute per-year breakdown for avg/month
   let allYearsSummary = [];
   if (isAllYears) {
@@ -12919,7 +12932,7 @@ function renderDashboard(){
       { label:'Total Net Saved',     val:fmtC(yearNet),           sub:`All-years income minus expenses`,                                                    icon:'⚖️', color:yearNet>=0?'var(--surplus)':'var(--deficit)', cls:yearNet>=0?'positive':'negative' },
       { label:'Overall Savings Rate',val:pct(sr),                 sub:`Saved: ${fmtC(yearSav)} · Leftover: ${fmtC(yearNet)}`,                                                        icon:'📊', color:sr>=0?'var(--surplus)':'var(--deficit)',  cls:sr>=0?'positive':'negative' },
       { label:'Avg Monthly Expenses',val:fmtC(avgMonthExp),       sub:`Based on ${numYears * 12} months of data`,                                           icon:'🔥', color:'var(--warn)',     cls:'' },
-      { label:'Total Saving',        val:fmtC(yearSav),           sub:`Across ${numYears} year${numYears>1?'s':''} · avg ${fmtC(yearSav/numYears)}/yr`,    icon:'💰', color:'var(--accent3)', cls:'' },
+      { label:'Total Saving',        val:fmtC(yearSav),           sub:`${savMonthSub} · avg ${fmtC(yearSav/numYears)}/yr`,    icon:'💰', color:'var(--accent3)', cls:'' },
       { label:'Avg Monthly Net',     val:fmtC(avgMonthNet),       sub:`Avg income/mo: ${fmtC(yearInc/(numYears*12))}`,                                      icon:'🔭', color:avgMonthNet>=0?'var(--surplus)':'var(--deficit)', cls:avgMonthNet>=0?'positive':'negative' },
       { label:'Total Debt',          val:fmtC(td),                sub:`${DB.loans.filter(l=>l.name).length} active loans`,                                  icon:'💳', color:'var(--danger)',   cls:td>0?'negative':'' },
       { label:'Leave Balance',       val:lb.toFixed(1)+' days',   sub:`since ${getActiveCareerPos()?.start?.slice(0,7) || 'job start'}`,                                                  icon:'🌴', color:lb>=5?'var(--accent2)':lb>=0?'var(--warn)':'var(--deficit)' },
@@ -12934,7 +12947,7 @@ function renderDashboard(){
       { label:`${monthLabel} Net`,      val:fmtC(curNet),   sub:`Income − Expenses · ${yearLabel} net: ${fmtC(yearNet)}`,                  icon:'⚖️', color:curNet>=0?'var(--surplus)':'var(--deficit)', cls:curNet>=0?'positive':'negative' },
       { label:`${yearLabel} Savings Rate`, val:pct(sr),     sub:`Saved: ${fmtC(yearSav)} · Leftover: ${fmtC(yearNet)}`,                                             icon:'📊', color:sr>=0?'var(--surplus)':'var(--deficit)',  cls:sr>=0?'positive':'negative' },
       { label: isCurrentYear ? 'Daily Burn Rate' : `${yearLabel} Avg/Month`, val: isCurrentYear ? fmtC(dailyBurn) : fmtC(yearExp/12), sub: isCurrentYear ? `${today.getDate()} days elapsed this month` : `Avg monthly expenses ${yearLabel}`, icon:'🔥', color:'var(--warn)', cls:'' },
-      { label:'Total Saving',      val:fmtC(yearSav),  sub:`${yearLabel} total moved to savings`,                           icon:'💰', color:'var(--accent3)',                          cls:'' },
+      { label:'Total Saving',      val:fmtC(yearSav),  sub:`${savMonthSub} · ${yearLabel} total`,                           icon:'💰', color:'var(--accent3)',                          cls:'' },
       { label:'Total Debt',        val:fmtC(td),       sub:`${DB.loans.filter(l=>l.name).length} active loans`,             icon:'💳', color:'var(--danger)',                           cls:td>0?'negative':'' },
       { label:`Leave Balance`,     val:lb.toFixed(1)+' days', sub:`since ${getActiveCareerPos()?.start?.slice(0,7) || 'job start'}`,                     icon:'🌴', color:lb>=5?'var(--accent2)':lb>=0?'var(--warn)':'var(--deficit)' },
       { label:'Active Goals',      val:ag,             sub:`${DB.goals.filter(g=>g.status==='✅ Achieved').length} achieved`,icon:'🎯', color:'var(--accent3)' },
@@ -17639,23 +17652,42 @@ function syncSubToLedger(s) {
   // of any cancelled/paused subscription and never recreating it — fixed.
   if (!s.amount || s.amount <= 0) return;
 
-  const today = new Date();
-  // Start from the subscription's actual start date (or beginning of current year if none)
-  const startDate = s.start ? new Date(s.start) : new Date(today.getFullYear(), 0, 1);
-  // End at cancellation date, or current month
-  const endDate = s.cancelledOn ? new Date(s.cancelledOn) : new Date(today.getFullYear(), today.getMonth(), 1);
+  // Free-tier subscriptions never charge anything
+  if (s.tier === 'free') return;
 
-  // Walk every month from startDate through endDate, spanning multiple years
-  const cursor = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
-  const stop   = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const pd = v => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v||''); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; };
+  const fmt = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 
-  while (cursor <= stop) {
-    const moYr = cursor.getFullYear();
-    const moIdx = cursor.getMonth();
-    const mn = MO_NAMES[moIdx];
-    const mo = `${mn} ${moYr}`;
+  // First charge = the subscription's start date (or Jan 1 of this year if none).
+  // Free trials: first charge happens when the trial ends.
+  let first = pd(s.start) || new Date(today.getFullYear(), 0, 1);
+  if (s.tier === 'trial') {
+    const te = pd(s.trialEnds);
+    if (te) first = te; else return; // trial with no end date -> nothing to charge yet
+  }
+  const anchorDay = first.getDate();
 
-    // Ensure year bucket exists
+  // Last charge date allowed = today, capped by cancellation date
+  let last = today;
+  const canc = pd(s.cancelledOn);
+  if (canc && canc < last) last = canc;
+
+  const stepMonths = s.cycle === 'Annual' ? 12 : s.cycle === 'Quarterly' ? 3 : 1;
+  let n = 0;
+
+  // Walk each billing date from start -> last (never in the future)
+  while (true) {
+    const target = new Date(first.getFullYear(), first.getMonth() + n * stepMonths, 1);
+    const dim = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+    const chargeDate = new Date(target.getFullYear(), target.getMonth(), Math.min(anchorDay, dim));
+    if (chargeDate > last) break;
+    n++;
+
+    const moYr = chargeDate.getFullYear();
+    const moIdx = chargeDate.getMonth();
+    const mo = `${MO_NAMES[moIdx]} ${moYr}`;
+
     if (!_mirror.years[moYr]) {
       _mirror.years[moYr] = {};
       YEAR_KEYS.forEach(k => { _mirror.years[moYr][k] = []; });
@@ -17663,14 +17695,14 @@ function syncSubToLedger(s) {
     }
     if (!_mirror.years[moYr].transactions) _mirror.years[moYr].transactions = [];
 
-    // Skip if user has a manually edited transaction for this month
+    const dateStr = fmt(chargeDate);
     const hasManual = _mirror.years[moYr].transactions.some(
       t => t.subId === s.id && t.manuallyEdited && t.month === mo
     );
     if (!hasManual) {
       const tx = {
         id: Date.now() + moYr * 100 + moIdx + Math.floor(Math.random() * 99999),
-        date: `${moYr}-${String(moIdx+1).padStart(2,'0')}-01`,
+        date: dateStr,
         month: mo,
         type: '💸 Expense',
         category: s.cat || '🔄 Subscriptions',
@@ -17683,16 +17715,33 @@ function syncSubToLedger(s) {
         friendTag: ''
       };
       _mirror.years[moYr].transactions.push(tx);
-      // Also update in-memory DB.transactions if this month belongs to active year
       const activeYrNum = activeYear === 'all' ? today.getFullYear() : +activeYear;
-      if (moYr === activeYrNum && DB.transactions) {
-        DB.transactions.push(tx);
-      }
+      if (moYr === activeYrNum && DB.transactions) DB.transactions.push(tx);
     }
-
-    cursor.setMonth(cursor.getMonth() + 1);
+    if (n > 600) break; // safety
   }
 }
+
+// ─── DAILY AUTO-CHECK ────────────────────────────────────────────────────────
+// If the app stays open past midnight (or the tab is revisited on a new day),
+// re-run the subscription sync so a subscription that starts/renews today is
+// added to the ledger on that day.
+let _subSyncDay = new Date().toDateString();
+function subDailyCheck() {
+  const d = new Date().toDateString();
+  if (d === _subSyncDay) return;
+  _subSyncDay = d;
+  try {
+    if (typeof autoCloseExpiredSubscriptions === 'function') autoCloseExpiredSubscriptions();
+    (DB.subscriptions || []).forEach(s => { try { syncSubToLedger(s); } catch(e) {} });
+    saveDB();
+    if (currentPage === 'budget' && typeof renderBudget === 'function') renderBudget();
+    else if (currentPage === 'dashboard' && typeof renderDashboard === 'function') renderDashboard();
+    else if (currentPage === 'subs' && typeof renderSubs === 'function') renderSubs();
+  } catch(e) { console.error('subDailyCheck failed', e); }
+}
+setInterval(subDailyCheck, 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) subDailyCheck(); });
 
 // Sync all active subscriptions to ledger at once
 function syncAllSubsToLedger() {
@@ -21022,7 +21071,7 @@ function getDailyBurnAndForecast() {
   const monthKey = today.toLocaleString('en-US', { month: 'long' }) + ' ' + today.getFullYear();
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const dayOfMonth = today.getDate();
-  const monthTxs = DB.transactions.filter(t => t.month === monthKey && t.type === '💸 Expense');
+  const monthTxs = DB.transactions.filter(t => t.month === monthKey && t.type === '💸 Expense' && t.category !== '💰 Savings');
   const monthIncome = DB.transactions.filter(t => t.month === monthKey && t.type === '💰 Income').reduce((a, t) => a + (+t.amount || 0), 0);
   const totalExp = monthTxs.reduce((a, t) => a + (+t.amount || 0), 0);
   const dailyBurn = dayOfMonth > 0 ? totalExp / dayOfMonth : 0;
