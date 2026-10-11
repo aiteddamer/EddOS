@@ -13179,9 +13179,13 @@ function renderBudget(){
   if(cat) txs = txs.filter(t=>t.category===cat);
   if(search) txs = txs.filter(t=>(t.desc||'').toLowerCase().includes(search)||(t.category||'').toLowerCase().includes(search));
   const inc = txs.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
-  const exp = txs.filter(t=>t.type==='💸 Expense').reduce((a,t)=>a+(+t.amount||0),0);
+  // Expenses = real spending only. 💰 Savings transfers (adds are +, withdrawals are −)
+  // are NOT spending — they're shown separately as "Saved (net)" so this total
+  // matches the Dashboard's Expenses for the same month.
+  const exp = txs.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
+  const savNet = txs.filter(t=>t.type==='💸 Expense' && t.category==='💰 Savings').reduce((a,t)=>a+(+t.amount||0),0);
   document.getElementById('budgetKpis').innerHTML = [
-    ['Income','amount-pos',fmt(inc)+' MAD'],['Expenses','amount-neg',fmt(exp)+' MAD'],['Net',inc-exp>=0?'amount-pos':'amount-neg',fmt(inc-exp)+' MAD'],
+    ['Income','amount-pos',fmt(inc)+' MAD'],['Expenses','amount-neg',fmt(exp)+' MAD'],['Saved (net)',savNet>=0?'amount-pos':'amount-neg',fmt(savNet)+' MAD'],['Net',inc-exp>=0?'amount-pos':'amount-neg',fmt(inc-exp)+' MAD'],
   ].map(([l,c,v])=>`<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 20px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">${l}</div><div class="${c}" style="font-size:18px;font-family:'Syne',sans-serif;font-weight:800;margin-top:4px">${v}</div></div>`).join('');
   // Helper: convert "Month YYYY" string to a sortable number (newest month = largest)
   function _monthToNum(m) {
