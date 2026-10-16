@@ -11760,6 +11760,8 @@ const CONFIG_KEYS = ['incomeSources','friends','settings','careerPositions','car
 // FILE_DATA is injected by export — empty on fresh file
 // Format: { userName, userEmoji, userPin, years: { "2026": {...yearKeys} }, config: {...configKeys} }
 const FILE_DATA = /*INJECT_DATA*/null/*END_INJECT*/;
+// UID of the account whose data is embedded in FILE_DATA (stamped at export time).
+const FILE_OWNER_UID = /*INJECT_OWNER*/null/*END_OWNER*/;
 
 // ── Unique storage key per file — each exported file is fully isolated ──
 // FILE_ID is embedded at export time so every file has its own localStorage bucket.
@@ -11832,9 +11834,21 @@ function _claimLocalCacheFor(uid){
   try { owner = localStorage.getItem(_OWNER_KEY); } catch(e) {}
   if (owner !== uid) {            // different account (or unknown owner) → drop everything cached
     _wipeLocalAccountData();
-    _resetMirrorInPlace();
+    try { if (typeof _idbClearHandle === 'function') _idbClearHandle().catch(()=>{}); } catch(e) {}
+    try { _fsAutoSaveEnabled = false; _fsFileHandle = null; } catch(e) {}   // don't keep writing into the previous account's file
     try { localStorage.setItem(_OWNER_KEY, uid); } catch(e) {}
   }
+  // Whatever was loaded at page start (cache / embedded file data) is NOT trusted:
+  // the cloud copy of THIS uid is the only source of truth.
+  _resetMirrorInPlace();
+}
+
+// Embedded FILE_DATA may only be imported into the account that owns it.
+function _fileDataBelongsTo(user){
+  if (!(FILE_DATA && FILE_DATA.userName)) return false;
+  if (FILE_OWNER_UID) return FILE_OWNER_UID === user.uid;
+  // Legacy file with no owner stamp → never import silently
+  return confirm('This file contains saved data for "' + FILE_DATA.userName + '".\n\nImport it into the account ' + (user.email || user.displayName || user.uid) + '?\n\nOK = import · Cancel = start with a blank account');
 }
 // ── Migration: bonusTypes moved from config (global) → per-year bucket ─────────
 (function migrateBonusTypesToYears(){
@@ -19571,7 +19585,7 @@ window._onFirebaseUser = async function(user) {
       activeProfileEmoji = _mirror.userEmoji || '👤';
       activeProfilePin   = null;
     } catch(e) { console.warn('Firestore data restore error', e); }
-  } else if (FILE_DATA && FILE_DATA.userName) {
+  } else if (_fileDataBelongsTo(user)) {
     // First login — seed Firestore with embedded FILE_DATA (only if it has real user data)
     if (msg) msg.textContent = 'Setting up your account…';
     activeProfileName  = FILE_DATA.userName  || user.displayName || user.email || 'User';
@@ -19913,6 +19927,8 @@ function _buildExportHTML() {
   return '<!DOCTYPE html>\n' + document.documentElement.outerHTML
     .replace(/\/\*INJECT_DATA\*\/[\s\S]*?\/\*END_INJECT\*\//,
       '/*INJECT_DATA*/' + inject + '/*END_INJECT*/')
+    .replace(/\/\*INJECT_OWNER\*\/[\s\S]*?\/\*END_OWNER\*\//,
+      '/*INJECT_OWNER*/' + JSON.stringify((window._fbCurrentUser && window._fbCurrentUser.uid) || FILE_OWNER_UID || null) + '/*END_OWNER*/')
     .replace(/\/\*INJECT_FILE_ID\*\/[\s\S]*?\/\*END_FILE_ID\*\//,
       '/*INJECT_FILE_ID*/"' + currentFileId + '"/*END_FILE_ID*/');
 }
@@ -19990,6 +20006,8 @@ function exportFile() {
   const out = ('<!DOCTYPE html>\n' + document.documentElement.outerHTML)
     .replace(/\/\*INJECT_DATA\*\/[\s\S]*?\/\*END_INJECT\*\//,
       '/*INJECT_DATA*/' + inject + '/*END_INJECT*/')
+    .replace(/\/\*INJECT_OWNER\*\/[\s\S]*?\/\*END_OWNER\*\//,
+      '/*INJECT_OWNER*/' + JSON.stringify((window._fbCurrentUser && window._fbCurrentUser.uid) || FILE_OWNER_UID || null) + '/*END_OWNER*/')
     .replace(/\/\*INJECT_FILE_ID\*\/[\s\S]*?\/\*END_FILE_ID\*\//,
       '/*INJECT_FILE_ID*/"' + newFileId + '"/*END_FILE_ID*/');
   const blob = new Blob([out], {type:'text/html'});
@@ -21329,7 +21347,9 @@ async function resetToFresh() {
         const blankHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML
           .replace(/\/\*INJECT_DATA\*\/[\s\S]*?\/\*END_INJECT\*\//,
             '/*INJECT_DATA*/' + inject + '/*END_INJECT*/')
-          .replace(/\/\*INJECT_FILE_ID\*\/[\s\S]*?\/\*END_FILE_ID\*\//,
+          .replace(/\/\*INJECT_OWNER\*\/[\s\S]*?\/\*END_OWNER\*\//,
+      '/*INJECT_OWNER*/' + JSON.stringify((window._fbCurrentUser && window._fbCurrentUser.uid) || FILE_OWNER_UID || null) + '/*END_OWNER*/')
+    .replace(/\/\*INJECT_FILE_ID\*\/[\s\S]*?\/\*END_FILE_ID\*\//,
             '/*INJECT_FILE_ID*/"' + currentFileId + '"/*END_FILE_ID*/');
         const w = await _fsFileHandle.createWritable();
         await w.write(blankHtml);
