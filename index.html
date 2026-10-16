@@ -11841,6 +11841,29 @@ function _claimLocalCacheFor(uid){
   // Whatever was loaded at page start (cache / embedded file data) is NOT trusted:
   // the cloud copy of THIS uid is the only source of truth.
   _resetMirrorInPlace();
+  _resetRuntimeState();
+}
+
+// The in-memory DB (and undo/redo history) was built at page start from the cached/embedded data.
+// Rebuild it empty so onboarding of a NEW account starts from zero and an old account's data
+// can never be flushed back into the new account's mirror.
+function _resetRuntimeState(){
+  try {
+    _undoStack.length = 0; _redoStack.length = 0;
+    DB = {};
+    YEAR_KEYS.forEach(k => {
+      const isObj = k === 'habitLog' || k === 'monthBudgets';
+      DB[k] = JSON.parse(JSON.stringify(DEFAULTS[k] !== undefined ? DEFAULTS[k] : (isObj ? {} : [])));
+    });
+    CONFIG_KEYS.forEach(k => {
+      DB[k] = JSON.parse(JSON.stringify(DEFAULTS[k] !== undefined ? DEFAULTS[k] : (k === 'settings' ? {} : [])));
+    });
+    DB.settings = JSON.parse(JSON.stringify(DEFAULTS.settings));
+    activeYear = new Date().getFullYear();
+    MONTHS = MO_NAMES.map(m => m + ' ' + activeYear);
+    activeCurrency = 'MAD';
+    currentPage = 'dashboard';
+  } catch(e) { console.warn('runtime reset failed', e); }
 }
 
 // Embedded FILE_DATA may only be imported into the account that owns it.
