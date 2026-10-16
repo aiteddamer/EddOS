@@ -3222,13 +3222,10 @@ window._fbHandleEmailSubmit = function() {
         </div>
         <div class="filter-row">
           <select id="budgetMonthFilter" onchange="renderBudget()"><option value="">All Months</option><option value="January 2024">January 2024</option><option value="February 2024">February 2024</option><option value="March 2024">March 2024</option><option value="April 2024">April 2024</option><option value="May 2024">May 2024</option><option value="June 2024">June 2024</option><option value="July 2024">July 2024</option><option value="August 2024">August 2024</option><option value="September 2024">September 2024</option><option value="October 2024">October 2024</option><option value="November 2024">November 2024</option><option value="December 2024">December 2024</option><option value="January 2025">January 2025</option><option value="February 2025">February 2025</option><option value="March 2025">March 2025</option><option value="April 2025">April 2025</option><option value="May 2025">May 2025</option><option value="June 2025">June 2025</option><option value="July 2025">July 2025</option><option value="August 2025">August 2025</option><option value="September 2025">September 2025</option><option value="October 2025">October 2025</option><option value="November 2025">November 2025</option><option value="December 2025">December 2025</option><option value="January 2026">January 2026</option><option value="February 2026">February 2026</option><option value="March 2026">March 2026</option><option value="April 2026">April 2026</option><option value="May 2026">May 2026</option><option value="June 2026">June 2026</option><option value="July 2026">July 2026</option><option value="August 2026">August 2026</option><option value="September 2026">September 2026</option><option value="October 2026">October 2026</option><option value="November 2026">November 2026</option><option value="December 2026">December 2026</option></select>
-          <select id="budgetWeekFilter" onchange="renderBudget()" title="Filter by week of the month">
+          <select id="budgetWeekFilter" onchange="renderBudget()" title="Filter by Monday–Sunday week">
             <option value="">All Weeks</option>
-            <option value="1">Week 1 (1–7)</option>
-            <option value="2">Week 2 (8–14)</option>
-            <option value="3">Week 3 (15–21)</option>
-            <option value="4">Week 4 (22–28)</option>
-            <option value="5">Week 5 (29–end)</option>
+            <option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option>
+            <option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option>
           </select>
           <select id="budgetTypeFilter" onchange="renderBudget()">
             <option value="">All Types</option>
@@ -13165,6 +13162,35 @@ function renderDashboard(){
 }
 
 // ─── BUDGET ─────────────────────────────────────────────────────────────────
+// Monday–Sunday weeks of a month → [{w, from, to, label}]
+function _monthWeeks(yr, mIdx, daysInMonth){
+  const firstDow = (new Date(yr, mIdx, 1).getDay()+6)%7;   // Mon=0 … Sun=6
+  const n = Math.floor((daysInMonth-1+firstDow)/7)+1;
+  const out = [];
+  for(let w=1; w<=n; w++){
+    const from = Math.max(1, (w-1)*7-firstDow+1), to = Math.min(daysInMonth, w*7-firstDow);
+    const ms = MO_NAMES[mIdx].slice(0,3);
+    out.push({w, from, to, label: from===to ? `${ms} ${from}` : `${ms} ${from}–${to}`});
+  }
+  return out;
+}
+// Label the Week dropdown with real date ranges for the chosen month (hide weeks that don't exist)
+function _syncWeekOptions(month){
+  const sel = document.getElementById('budgetWeekFilter'); if(!sel) return;
+  let weeks = null;
+  if(month){
+    const [mName,yStr] = month.split(' '); const mIdx = MO_NAMES.indexOf(mName), yr = parseInt(yStr,10);
+    if(mIdx>=0 && yr) weeks = _monthWeeks(yr, mIdx, new Date(yr,mIdx+1,0).getDate());
+  }
+  [...sel.options].forEach(o=>{
+    if(!o.value) return;
+    const w = parseInt(o.value,10), info = weeks && weeks.find(x=>x.w===w);
+    o.hidden = o.disabled = !!(weeks && !info);
+    o.text = info ? `Week ${w} (${info.label})` : `Week ${w}`;
+  });
+  if(sel.value && sel.options[sel.selectedIndex].disabled) sel.value = '';
+}
+
 // ─── WEEKLY EXPENSE BREAKDOWN + WEEK-vs-WEEK DIFF ───────────────────────────
 function renderBudgetWeekly(base, month, selWeek, weekOf){
   const el = document.getElementById('budgetWeekly');
@@ -13173,9 +13199,7 @@ function renderBudgetWeekly(base, month, selWeek, weekOf){
   const [mName, yStr] = month.split(' ');
   const mIdx = MO_NAMES.indexOf(mName), yr = parseInt(yStr,10);
   const daysInMonth = (mIdx>=0 && yr) ? new Date(yr, mIdx+1, 0).getDate() : 31;
-  const weeks = [1,2,3,4,5].map(w=>({
-    w, from:(w-1)*7+1, to:Math.min(w*7, daysInMonth), total:0, count:0
-  })).filter(x=>x.from<=daysInMonth);
+  const weeks = _monthWeeks(yr, mIdx, daysInMonth).map(x=>({...x, total:0, count:0}));
   // Real spending only (same rule as the Expenses KPI: Savings transfers excluded)
   base.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings').forEach(t=>{
     const w = weekOf(t); const row = weeks.find(x=>x.w===w);
@@ -13198,7 +13222,7 @@ function renderBudgetWeekly(base, month, selWeek, weekOf){
     const share = monthTotal>0 ? (x.total/monthTotal*100) : 0;
     const isSel = selWeek===x.w;
     return `<tr style="cursor:pointer;${isSel?'background:rgba(var(--accent-rgb),0.08)':''}" onclick="document.getElementById('budgetWeekFilter').value='${isSel?'':x.w}';renderBudget()" title="Click to filter the ledger by this week">
-      <td style="font-family:'DM Mono',monospace;font-size:11px;white-space:nowrap"><b>W${x.w}</b> <span style="color:var(--text3)">${x.from}–${x.to}</span></td>
+      <td style="font-family:'DM Mono',monospace;font-size:11px;white-space:nowrap"><b>W${x.w}</b> <span style="color:var(--text3)">${x.label}</span></td>
       <td class="amount-neg" style="font-family:'DM Mono',monospace;font-weight:700;white-space:nowrap">${fmt(x.total)}</td>
       <td style="font-size:11px;color:var(--text3)">${x.count}</td>
       <td style="min-width:90px"><div style="background:var(--surface3);border-radius:4px;height:8px;overflow:hidden"><div style="width:${(x.total/maxW*100).toFixed(1)}%;height:100%;background:var(--accent);border-radius:4px"></div></div></td>
@@ -13219,7 +13243,7 @@ function renderBudgetWeekly(base, month, selWeek, weekOf){
       <thead><tr><th style="text-align:left">Week</th><th style="text-align:left">Expenses (MAD)</th><th style="text-align:left">#</th><th></th><th style="text-align:left">Share</th><th style="text-align:left">Δ vs previous week</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    <div style="font-size:10px;color:var(--text3);margin-top:8px">Weeks are day ranges of the month (1–7, 8–14, …). 🔴 ▲ = spent more than previous week · 🟢 ▼ = spent less. Click a row to filter the ledger.</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">Weeks run Monday–Sunday; the first and last week of a month can be partial. 🔴 ▲ = spent more than previous week · 🟢 ▼ = spent less. Click a row to filter the ledger.</div>
   </div>`;
 }
 
@@ -13243,7 +13267,14 @@ function renderBudget(){
   let txs = DB.transactions.filter(t => activeYear==='all' || MONTHS.includes(t.month));
   if(month) txs = txs.filter(t=>t.month===month);
   // ── Week-of-month helper: days 1–7 = W1, 8–14 = W2, 15–21 = W3, 22–28 = W4, 29+ = W5
-  const _weekOf = t => { const d = parseInt(((t.date||'').split('-')[2])||'',10); return d ? Math.min(5, Math.ceil(d/7)) : 0; };
+  // Real Monday–Sunday weeks: Week 1 = 1st of the month up to the first Sunday, then each Mon–Sun, last week ends on the month's last day.
+  const _weekOf = t => {
+    const [y,m,d] = (t.date||'').split('-').map(n=>parseInt(n,10));
+    if(!y||!m||!d) return 0;
+    const firstDow = (new Date(y,m-1,1).getDay()+6)%7;   // Mon=0 … Sun=6
+    return Math.floor((d-1+firstDow)/7)+1;
+  };
+  _syncWeekOptions(month);
   const week = parseInt(document.getElementById('budgetWeekFilter').value,10) || 0;
   // Snapshot used by the weekly breakdown (ignores Type + Week filters so all weeks stay visible)
   let _wkBase = txs.slice();
