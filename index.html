@@ -2125,7 +2125,11 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
     }
   };
   window._fbSignOut = async () => {
-    await signOut(auth);
+    try { if (window._fbSessionPollTimer) clearInterval(window._fbSessionPollTimer); } catch(e) {}
+    try { window._fbSavePatched = false; } catch(e) {}
+    try { await signOut(auth); } catch(e) {}
+    try { _wipeLocalAccountData(); } catch(e) {}
+    try { if (typeof _idbClearHandle === 'function') await _idbClearHandle(); } catch(e) {}
     location.reload();
   };
 
@@ -2272,7 +2276,7 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
     try {
       const fsData = await window._fbLoadUserData(user.uid);
       if (fsData && fsData._mirror) {
-        Object.assign(_mirror, fsData._mirror);
+        _resetMirrorInPlace(fsData._mirror);
         activeProfileName  = _mirror.userName  || user.displayName || user.email || 'User';
         activeProfileEmoji = _mirror.userEmoji || '\u{1F464}';
         if (typeof loadDB === 'function') loadDB();
@@ -2296,6 +2300,15 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
 
   // ── Auth state listener ──
   onAuthStateChanged(auth, user => {
+    const cur = window._fbCurrentUser;
+    if (cur && (!user || user.uid !== cur.uid)) {
+      // Another tab signed out or switched account → this tab still holds the old account's
+      // data in memory. Wipe the shared cache and reload so nothing crosses over.
+      try { if (window._fbSessionPollTimer) clearInterval(window._fbSessionPollTimer); } catch(e) {}
+      try { _wipeLocalAccountData(); } catch(e) {}
+      location.reload();
+      return;
+    }
     if (user) {
       window._onFirebaseUser(user);
     } else {
@@ -2309,9 +2322,9 @@ input, textarea, .kpi-value, td { -webkit-user-select: text; user-select: text; 
 // Match auth screen background to current theme before app loads
 (function() {
   try {
-    const stored = JSON.parse(localStorage.getItem(localStorage.key(
-      Array.from({length:localStorage.length},(_,i)=>i).find(i=>localStorage.key(i).startsWith('lifeOS_'))
-    ) || '{}') || '{}');
+    const _k = Array.from({length:localStorage.length},(_,i)=>localStorage.key(i))
+      .find(k => k.startsWith('lifeOS_') && !k.includes('__'));
+    const stored = _k ? JSON.parse(localStorage.getItem(_k) || '{}') : {};
     const theme = stored?.config?.settings?.theme || stored?.settings?.theme;
     if (theme && theme !== 'light') {
       document.documentElement.setAttribute('data-theme', theme);
@@ -11793,6 +11806,36 @@ if (!_lsData && _effectiveData) {
 }
 
 let _mirror = _effectiveData ? JSON.parse(JSON.stringify(_effectiveData)) : { userName:'', userEmoji:'👤', userPin:null, years:{}, config:{} };
+// ── Account isolation ────────────────────────────────────────────────────────
+// The local cache (LS_KEY) is shared by every account that opens this file, so we
+// record WHICH account owns it and wipe it whenever a different account signs in
+// (or the user signs out). Cloud (Firestore, keyed by uid) is the only source of truth.
+const _OWNER_KEY = LS_KEY + '__owner';
+function _blankMirror(){ return { userName:'', userEmoji:'👤', userPin:null, years:{}, config:{} }; }
+function _resetMirrorInPlace(next){
+  Object.keys(_mirror).forEach(k => delete _mirror[k]);
+  Object.assign(_mirror, next || _blankMirror());
+}
+function _wipeLocalAccountData(){
+  try {
+    const kill = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k === LS_KEY || k.startsWith(LS_KEY + '__') || k.startsWith('lifeOS_'))) kill.push(k);
+    }
+    kill.forEach(k => localStorage.removeItem(k));
+  } catch(e) {}
+  try { sessionStorage.clear(); } catch(e) {}
+}
+function _claimLocalCacheFor(uid){
+  let owner = null;
+  try { owner = localStorage.getItem(_OWNER_KEY); } catch(e) {}
+  if (owner !== uid) {            // different account (or unknown owner) → drop everything cached
+    _wipeLocalAccountData();
+    _resetMirrorInPlace();
+    try { localStorage.setItem(_OWNER_KEY, uid); } catch(e) {}
+  }
+}
 // ── Migration: bonusTypes moved from config (global) → per-year bucket ─────────
 (function migrateBonusTypesToYears(){
   if(!_mirror || !_mirror.years) return;
@@ -19447,6 +19490,7 @@ window._onFirebaseUser = async function(user) {
   if (_fbDataLoaded) return;   // already in app — skip
   _fbDataLoaded = true;
   window._fbCurrentUser = user;
+  _claimLocalCacheFor(user.uid);   // never reuse another account's cached data
 
   // Show loading state immediately
   const btn  = document.getElementById('_fbGoogleBtn');
@@ -19520,7 +19564,7 @@ window._onFirebaseUser = async function(user) {
       const cloudTs = fsData._lastSync || fsData._mirror._lastSync || 0;
       // Apply cloud data unconditionally
       if (msg) msg.textContent = 'Syncing from cloud…';
-      Object.assign(_mirror, (fsData && fsData._mirror) ? fsData._mirror : _mirror);
+      _resetMirrorInPlace(fsData._mirror);   // REPLACE, never merge with what was in memory/cache
       _mirror._lastSync = cloudTs;
       // Re-derive activeProfile
       activeProfileName  = _mirror.userName  || user.displayName || user.email || 'User';
@@ -19533,12 +19577,14 @@ window._onFirebaseUser = async function(user) {
     activeProfileName  = FILE_DATA.userName  || user.displayName || user.email || 'User';
     activeProfileEmoji = FILE_DATA.userEmoji || '👤';
     activeProfilePin   = null;
+    _resetMirrorInPlace(JSON.parse(JSON.stringify(FILE_DATA)));
     // Persist embedded data to Firestore for future logins
     if (window._fbSaveUserData) {
       await window._fbSaveUserData(user.uid, { _mirror: FILE_DATA, _seeded: true, _uid: user.uid });
     }
   } else {
     // Brand new user — no data at all → show onboarding
+    _resetMirrorInPlace();   // guarantee a blank slate, never another account's leftovers
     activeProfileName  = user.displayName || user.email || 'User';
     activeProfileEmoji = '👤';
     activeProfilePin   = null;
@@ -27269,7 +27315,7 @@ function _cfgCommit() {
 // Firestore (cloud) first. Shows a countdown warning before acting, and any
 // user activity during the warning cancels the logoff.
 (function() {
-  const LS_MINUTES_KEY = 'eddos_autologoff_minutes'; // 0 = disabled
+  const LS_MINUTES_KEY = 'eddos_autologoff_minutes'; // 0 = disabled (device-level preference, holds no account data)
   const DEFAULT_MINUTES = 5;
   const WARNING_SECONDS = 60; // show the "still there?" modal this many seconds before logoff
 
