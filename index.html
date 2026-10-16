@@ -3222,6 +3222,14 @@ window._fbHandleEmailSubmit = function() {
         </div>
         <div class="filter-row">
           <select id="budgetMonthFilter" onchange="renderBudget()"><option value="">All Months</option><option value="January 2024">January 2024</option><option value="February 2024">February 2024</option><option value="March 2024">March 2024</option><option value="April 2024">April 2024</option><option value="May 2024">May 2024</option><option value="June 2024">June 2024</option><option value="July 2024">July 2024</option><option value="August 2024">August 2024</option><option value="September 2024">September 2024</option><option value="October 2024">October 2024</option><option value="November 2024">November 2024</option><option value="December 2024">December 2024</option><option value="January 2025">January 2025</option><option value="February 2025">February 2025</option><option value="March 2025">March 2025</option><option value="April 2025">April 2025</option><option value="May 2025">May 2025</option><option value="June 2025">June 2025</option><option value="July 2025">July 2025</option><option value="August 2025">August 2025</option><option value="September 2025">September 2025</option><option value="October 2025">October 2025</option><option value="November 2025">November 2025</option><option value="December 2025">December 2025</option><option value="January 2026">January 2026</option><option value="February 2026">February 2026</option><option value="March 2026">March 2026</option><option value="April 2026">April 2026</option><option value="May 2026">May 2026</option><option value="June 2026">June 2026</option><option value="July 2026">July 2026</option><option value="August 2026">August 2026</option><option value="September 2026">September 2026</option><option value="October 2026">October 2026</option><option value="November 2026">November 2026</option><option value="December 2026">December 2026</option></select>
+          <select id="budgetWeekFilter" onchange="renderBudget()" title="Filter by week of the month">
+            <option value="">All Weeks</option>
+            <option value="1">Week 1 (1–7)</option>
+            <option value="2">Week 2 (8–14)</option>
+            <option value="3">Week 3 (15–21)</option>
+            <option value="4">Week 4 (22–28)</option>
+            <option value="5">Week 5 (29–end)</option>
+          </select>
           <select id="budgetTypeFilter" onchange="renderBudget()">
             <option value="">All Types</option>
             <option>💰 Income</option>
@@ -3235,6 +3243,7 @@ window._fbHandleEmailSubmit = function() {
         </div>
       </div>
       <div id="budgetKpis" style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap"><div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 20px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Income</div><div class="amount-pos" style="font-size:18px;font-family:'Syne',sans-serif;font-weight:800;margin-top:4px">191,559.00 MAD</div></div><div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 20px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Expenses</div><div class="amount-neg" style="font-size:18px;font-family:'Syne',sans-serif;font-weight:800;margin-top:4px">177,596.52 MAD</div></div><div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:12px 20px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">Net</div><div class="amount-pos" style="font-size:18px;font-family:'Syne',sans-serif;font-weight:800;margin-top:4px">13,962.48 MAD</div></div></div>
+      <div id="budgetWeekly"></div>
       <table id="budgetTable">
     <thead><tr><th>Date</th><th>Type</th><th>Month</th><th>Category</th><th>Amount</th><th>Description</th><th>Method</th><th>Tags</th><th>Friend</th><th></th></tr></thead>
     <tbody><tr id="tx-row-1778240508954" class="tx-view-row">
@@ -13156,6 +13165,64 @@ function renderDashboard(){
 }
 
 // ─── BUDGET ─────────────────────────────────────────────────────────────────
+// ─── WEEKLY EXPENSE BREAKDOWN + WEEK-vs-WEEK DIFF ───────────────────────────
+function renderBudgetWeekly(base, month, selWeek, weekOf){
+  const el = document.getElementById('budgetWeekly');
+  if(!el) return;
+  if(!month){ el.innerHTML=''; return; }   // needs a single month to compare its weeks
+  const [mName, yStr] = month.split(' ');
+  const mIdx = MO_NAMES.indexOf(mName), yr = parseInt(yStr,10);
+  const daysInMonth = (mIdx>=0 && yr) ? new Date(yr, mIdx+1, 0).getDate() : 31;
+  const weeks = [1,2,3,4,5].map(w=>({
+    w, from:(w-1)*7+1, to:Math.min(w*7, daysInMonth), total:0, count:0
+  })).filter(x=>x.from<=daysInMonth);
+  // Real spending only (same rule as the Expenses KPI: Savings transfers excluded)
+  base.filter(t=>t.type==='💸 Expense' && t.category!=='💰 Savings').forEach(t=>{
+    const w = weekOf(t); const row = weeks.find(x=>x.w===w);
+    if(row){ row.total += (+t.amount||0); row.count++; }
+  });
+  const monthTotal = weeks.reduce((a,x)=>a+x.total,0);
+  const maxW = Math.max(...weeks.map(x=>x.total), 1);
+  const rows = weeks.map((x,i)=>{
+    const prev = i>0 ? weeks[i-1] : null;
+    let diffHtml = '<span style="color:var(--text3)">—</span>';
+    if(prev){
+      const d = x.total - prev.total;
+      const pct = prev.total>0 ? (d/prev.total*100) : null;
+      const up = d>0, flat = d===0;
+      const col = flat ? 'var(--text3)' : (up ? 'var(--deficit)' : 'var(--surplus)');
+      const arrow = flat ? '＝' : (up ? '▲' : '▼');
+      diffHtml = `<span style="color:${col};font-weight:700">${arrow} ${up?'+':(flat?'':'−')}${fmt(Math.abs(d))}</span>`
+               + `<span style="color:${col};font-size:10px;margin-left:6px">${pct===null?'new':(up?'+':(flat?'':'−'))+Math.abs(pct).toFixed(0)+'%'}</span>`;
+    }
+    const share = monthTotal>0 ? (x.total/monthTotal*100) : 0;
+    const isSel = selWeek===x.w;
+    return `<tr style="cursor:pointer;${isSel?'background:rgba(var(--accent-rgb),0.08)':''}" onclick="document.getElementById('budgetWeekFilter').value='${isSel?'':x.w}';renderBudget()" title="Click to filter the ledger by this week">
+      <td style="font-family:'DM Mono',monospace;font-size:11px;white-space:nowrap"><b>W${x.w}</b> <span style="color:var(--text3)">${x.from}–${x.to}</span></td>
+      <td class="amount-neg" style="font-family:'DM Mono',monospace;font-weight:700;white-space:nowrap">${fmt(x.total)}</td>
+      <td style="font-size:11px;color:var(--text3)">${x.count}</td>
+      <td style="min-width:90px"><div style="background:var(--surface3);border-radius:4px;height:8px;overflow:hidden"><div style="width:${(x.total/maxW*100).toFixed(1)}%;height:100%;background:var(--accent);border-radius:4px"></div></div></td>
+      <td style="font-size:11px;color:var(--text2)">${share.toFixed(0)}%</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;white-space:nowrap">${diffHtml}</td>
+    </tr>`;
+  }).join('');
+  const active = weeks.filter(x=>x.total>0);
+  const avg = active.length ? monthTotal/active.length : 0;
+  const peak = active.length ? active.reduce((m,x)=>x.total>m.total?x:m) : null;
+  const first = weeks[0].total, last = weeks[weeks.length-1].total;
+  el.innerHTML = `<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace">📅 Weekly expenses — ${month}</div>
+      <div style="font-size:11px;color:var(--text2)">${active.length?`Avg/active week <b>${fmt(avg)}</b> · Peak <b>W${peak.w}</b> (${fmt(peak.total)})`:'No expenses this month'}</div>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">
+      <thead><tr><th style="text-align:left">Week</th><th style="text-align:left">Expenses (MAD)</th><th style="text-align:left">#</th><th></th><th style="text-align:left">Share</th><th style="text-align:left">Δ vs previous week</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:8px">Weeks are day ranges of the month (1–7, 8–14, …). 🔴 ▲ = spent more than previous week · 🟢 ▼ = spent less. Click a row to filter the ledger.</div>
+  </div>`;
+}
+
 let _budgetMonthFilterDefaulted = false;
 function renderBudget(){
   // Populate filters
@@ -13175,9 +13242,18 @@ function renderBudget(){
   const cat = cf.value, search = document.getElementById('budgetSearch').value.toLowerCase();
   let txs = DB.transactions.filter(t => activeYear==='all' || MONTHS.includes(t.month));
   if(month) txs = txs.filter(t=>t.month===month);
+  // ── Week-of-month helper: days 1–7 = W1, 8–14 = W2, 15–21 = W3, 22–28 = W4, 29+ = W5
+  const _weekOf = t => { const d = parseInt(((t.date||'').split('-')[2])||'',10); return d ? Math.min(5, Math.ceil(d/7)) : 0; };
+  const week = parseInt(document.getElementById('budgetWeekFilter').value,10) || 0;
+  // Snapshot used by the weekly breakdown (ignores Type + Week filters so all weeks stay visible)
+  let _wkBase = txs.slice();
+  if(cat) _wkBase = _wkBase.filter(t=>t.category===cat);
+  if(search) _wkBase = _wkBase.filter(t=>(t.desc||'').toLowerCase().includes(search)||(t.category||'').toLowerCase().includes(search));
   if(type) txs = txs.filter(t=>t.type===type);
   if(cat) txs = txs.filter(t=>t.category===cat);
   if(search) txs = txs.filter(t=>(t.desc||'').toLowerCase().includes(search)||(t.category||'').toLowerCase().includes(search));
+  if(week) txs = txs.filter(t=>_weekOf(t)===week);
+  renderBudgetWeekly(_wkBase, month, week, _weekOf);
   const inc = txs.filter(t=>t.type==='💰 Income').reduce((a,t)=>a+(+t.amount||0),0);
   // Expenses = real spending only. 💰 Savings transfers (adds are +, withdrawals are −)
   // are NOT spending — they're shown separately as "Saved (net)" so this total
